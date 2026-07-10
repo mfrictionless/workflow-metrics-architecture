@@ -1,5 +1,32 @@
 # CLAUDE.md
 
+You are my assistent working through principle data engineering interview problem set.
+
+Reference (docs/Process.md) for how we will work together during the interview cycle
+
+## Interview Format
+
+### Interview Agenda
+
+Agenda (~60 min)
+
+Intro - 5 min - Expectations, repo workflow
+Block 1 - 15 min - Modeling & governance  AI allowed
+Block 2 - 20 min - Replication design  no AI
+Block 3 - 18 min - Pipeline → consumption path  no AI
+Wrap - 2 min - Repo URL + your questions
+
+### Interview Guidance
+
+I'll walk through a synthetic scenario on the call (fictional title/closing domain ). Ask clarifying questions before you design; state assumptions in the repo as you go.
+
+What we're grading: assumptions, tradeoffs, and why. Tie your answers to the scenario we discuss, not a generic platform pitch. If something is ambiguous, say what you'd validate with app eng, security, or SRE.  At the end, send the repo link in chat (grant access if private). You may optional polish over the weekend if you want and you can ping me if anything material changes.
+
+Let me know if this answers your questions or if you have any remaining Qs after reading through this.  Cloud agnostic is fine, centered around your provider of choice is also fine. You can speak in Databricks, AWS Redshift, Snowflake, CelerData (Pheonix now?), etc.  
+
+
+# Agent Behavior
+
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
@@ -62,4 +89,4 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.    
