@@ -1,4 +1,71 @@
-# Block 1 — Modeling & Governance
+
+
+# Block 1 - Modeling and Governance Guidance
+
+ 
+Guideance:
+
+1 Mart
+3-5 dimension columns
+Grain statement for the 
+
+Model:
+
+```sql
+-- files: core transaction/file record
+files (
+  file_id           bigint PK,
+  file_number       varchar,
+  status            varchar,
+  opened_at         timestamptz,
+  closed_at         timestamptz,
+  county_fips       varchar,
+  product_type      varchar
+)
+
+-- file_actions: workflow steps (send/receive lifecycle)
+file_actions (
+  file_action_id    bigint PK,
+  file_id           bigint FK → files,
+  action_code       varchar,
+  action_type       varchar,      -- e.g. Start, Complete
+  sent_at           timestamptz,
+  received_at       timestamptz,
+  sent_user_id      bigint,
+  received_user_id  bigint,
+  live_flag         boolean
+)
+
+-- audit_events: high-volume event log; description is free text
+audit_events (
+  audit_id          bigint PK,
+  file_id           bigint FK → files,
+  user_id           bigint,
+  event_at          timestamptz,
+  description       text
+)
+
+-- parties: borrower/seller/agent contact data
+parties (
+  party_id          bigint PK,
+  file_id           bigint FK → files,
+  role              varchar,
+  display_name      varchar,
+  email             varchar,
+  phone             varchar,
+  ssn_last4         varchar
+)
+
+-- users: internal operators and external vendor users
+users (
+  user_id           bigint PK,
+  team_name         varchar,
+  is_external_vendor_flag boolean
+)
+```
+
+
+# Block 1 — Modeling & Governance - Prep
 
 **Framing:** two intertwined concerns — the **model** (how we shape workflow data into facts and dimensions) and **governance** (who may see what, under which regulatory regime). Both hinge on **two master questions** we ask first:
 
