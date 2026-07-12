@@ -1,4 +1,9 @@
-# Block 2 — Dual-Postgres Replication
+# Actual
+
+
+
+
+# Block 2 — Dual-Postgres Replication - Prep
 
 **Framing:** two Postgres instances, and the entire design hinges on **why there are two**. We do **not** assume — we locate the scenario first, because the "why" dictates the replication *mode*, *topology*, and *consistency* target. Candidate reasons (the spectrum):
 

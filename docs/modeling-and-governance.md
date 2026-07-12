@@ -2,12 +2,13 @@
 
 # Block 1 - Modeling and Governance Guidance
 
- 
-Guideance:
+## Requirements
 
-1 Mart
-3-5 dimension columns
-Grain statement for the 
+- 1 Mart
+- 3-5 dimension columns
+- Grain statement
+
+## Input ODS
 
 Model:
 

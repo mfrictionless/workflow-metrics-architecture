@@ -65,7 +65,7 @@ If it contradicts an earlier decision, stop and reconcile before merging.
 
 ### 6. Append a decision-log entry
 
-The decision log ([`docs/Decisions.md`](./Decisions.md)) is the durable record of *why* each Change happened. It's append-only, numbered (D001, D002, D003, …), and mandatory: a Change without an entry is incomplete. Keep the README's **Key decisions** section as a short ADR-style digest that points back here.
+The decision log ([`design/Decisions.md`](./Decisions.md)) is the durable record of *why* each Change happened. It's append-only, numbered (D001, D002, D003, …), and mandatory: a Change without an entry is incomplete. Keep the README's **Key decisions** section as a short ADR-style digest that points back here.
 
 **Template** (the `Validation:` line is mandatory):
 ```markdown
