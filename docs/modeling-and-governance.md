@@ -63,6 +63,15 @@ users (
   team_name         varchar,
   is_external_vendor_flag boolean
 )
+
+-- user_party: bridge — one platform user to many party identities
+-- (added for the working example; lets one user hold multiple roles across files,
+--  e.g. seller on one file, agent on another)
+user_party (
+  user_party_id     bigint PK,
+  user_id           bigint FK → users,
+  party_id          bigint FK → parties   -- one user ↔ many parties
+)
 ```
 
 
