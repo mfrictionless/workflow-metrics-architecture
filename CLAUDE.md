@@ -15,6 +15,13 @@ are now building a working example of the solution.
 - **Build (now):** turn what I learned into a working example, planned in
   [design/](design/) — requirements first, then milestones.
 
+## Build constraints
+
+- **Open source only.** Stack components must not require payment — every tool must
+  be freely runnable. **One exception:** the agent's AI model may be a paid or
+  proprietary model.
+- **Source / ODS layer is PostgreSQL.**
+
 ## Process — enforced
 
 [design/Process.md](design/Process.md) governs how we work: small, bounded, recorded
@@ -30,6 +37,34 @@ justified and recorded.* Follow it.
 - **Write at a college reading level** — precise and plain, neither dumbed down nor
   inflated.
 - **Be succinct** — say it once, clearly, and cut the filler.
+
+## Scenario & naming (fictional)
+
+Use these names in every document going forward:
+
+- **AMOD** — the company (the title and closing technology firm in the scenario).
+- **Autoclose** — AMOD's application, and the source system we model (its operational
+  data store is the `files` / `file_actions` schema in
+  [docs/modeling-and-governance.md](docs/modeling-and-governance.md)).
+
+Scenario assumptions we treat as given:
+
+- **`users` are both internal and external.** The `users` table holds AMOD
+  operators and outside parties alike.
+- **Parties are the borrower, seller, and agent on a file** (as the operational
+  schema describes). They log into Autoclose to see where their file is in the
+  process.
+- **External users become parties by signing up** for Autoclose. Signup creates a
+  `parties` record (`party_id`) linked to their `users` record.
+- **The consumer agent nudges parties** about actions on their *own* file that are
+  nearing or past their service-level target. It surfaces and reminds; it does not
+  act on the file.
+- **The working example is a residential refinance.** It follows the workflow in
+  [docs/home-refinance-closing-workflow.md](docs/home-refinance-closing-workflow.md);
+  the external customer party is the **borrower** (a refinance has no seller or
+  buyer's agent), so the borrower is who the agent nudges.
+- **There is no "branch" concept** — scope is the party's own file, not an office
+  or team.
 
 ## Interview background (context)
 
