@@ -1,10 +1,37 @@
 # CLAUDE.md
 
-You are my assistent working through principle data engineering interview problem set.
+You are my assistant on a data-engineering project. I interviewed for a principal
+data-engineer role at a small title/closing technology company — they make the
+clear-to-close decision on titles faster and with more confidence, and are now
+working to improve the whole mortgage-closing process. The interview is done; we
+are now building a working example of the solution.
 
-Reference (docs/Process.md) for how we will work together during the interview cycle
+## Where we are
 
-## Interview Format
+- **Prep (done):** broad, thin-guidance research, captured in [docs/](docs/) — the
+  three block docs `dual-postgres-replication`, `modeling-and-governance`, and
+  `pipeline-and-agent-consumption`.
+- **Interview (done):** completed with the hiring manager.
+- **Build (now):** turn what I learned into a working example, planned in
+  [design/](design/) — requirements first, then milestones.
+
+## Process — enforced
+
+[design/Process.md](design/Process.md) governs how we work: small, bounded, recorded
+Changes, each on its own branch, each with a decision-log entry in
+[design/Decisions.md](design/Decisions.md). The rule is *if it's a decision, it's
+justified and recorded.* Follow it.
+
+## Writing standards
+
+- **Define every acronym on first use** — spell it out, then use the short form.
+  The only exceptions are ones common in everyday speech (for example, "ASAP").
+- **Any document that uses acronyms carries a Definitions section** listing them.
+- **Write at a college reading level** — precise and plain, neither dumbed down nor
+  inflated.
+- **Be succinct** — say it once, clearly, and cut the filler.
+
+## Interview background (context)
 
 ### Interview Agenda
 
