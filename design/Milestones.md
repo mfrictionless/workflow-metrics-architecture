@@ -64,8 +64,22 @@ milestone's own acceptance criteria.
   - With the configured port already occupied by something else, confirm `make up` fails with a message pointing at `.env` — not Docker's raw daemon error.
 
 **M0.3 — Single-command test run**
-- **Test:** One documented command runs every test suite across the repo (schema tests, dbt tests, simulator tests, API tests) as each is added
-- **Acceptance:** The command exits 0 only if every component's tests pass; a deliberately broken test in any one component causes the command to fail
+- **Test:** `make test` discovers and runs every test script in the repo — **fast** tier (`tests/*.sh`, no external infrastructure) first, then **integration** tier (`tests/integration/*.sh`, needs Docker) — stopping immediately at the first failing script (fail-fast) and naming it. `make test-fast` runs only the fast tier.
+- **Acceptance:** From a clean checkout with Docker running, `make test` runs every script in order and exits 0. A deliberately broken assertion in any one script stops the run at that script, names it, exits non-zero, and does not run subsequent scripts (including the entire integration tier, if the failure is in the fast tier). `make test-fast` completes with no Docker dependency.
+- **Dependencies:** M0.1 (`check_structure.sh` exists); M0.2 (compose file + the two integration scripts exist).
+- **Out-of-scope:**
+  - Built-in support for non-shell test tools (pytest, `dbt test`) — none exist yet. The milestone that introduces them (M1.4, M3) is responsible for making its tests discoverable under this same fast/integration glob convention.
+  - Parallel test execution.
+  - Test result caching / skip-unchanged-tests logic.
+  - **Aggregate-all-failures mode** (run everything, report every failure instead of stopping at the first) — flagged as a known trade-off of fail-fast; deferred to a future milestone once the suite is large enough that full-failure visibility per run outweighs the speed of stopping early.
+- **Automated Test Plan:**
+  - *Fast:* `tests/check_compose_config.sh` — wraps the `docker compose config` check as a discoverable script (was previously an ad-hoc command run by hand during M0.2).
+  - *Fast:* `tests/verify_test_runner_fail_fast.sh` — regression check on the runner itself: injects a deliberately-broken script (sorted to run first), runs `make test-fast`, asserts non-zero exit, that the broken script is named, and that `check_structure.sh` never ran afterward — proving fail-fast actually stops rather than silently continuing. Needs no Docker, so it qualifies as fast tier even though it's a meta-test.
+- **Manual Test Plan:**
+  - `make test` on a clean checkout with Docker running — confirm all scripts pass in order (fast tier, then integration tier).
+  - Stop the Docker daemon, run `make test-fast` — confirm it still passes.
+  - With Docker stopped, run `make test-integration` — confirm it fails clearly rather than hanging.
+  - Temporarily add a broken fast-tier script, run `make test`, confirm it stops there and never reaches the integration tier; remove the fixture after.
 
 ### M1: Source ODS and seed data
 

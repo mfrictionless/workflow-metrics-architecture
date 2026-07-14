@@ -62,3 +62,21 @@ Append-only record of *why* each Change happened. Numbered D001, D002, D003, …
 - **`make up` / `make down`, not bare `docker compose` commands, as the documented entrypoint.** Docker's own port-bind error is a daemon-level message with no reference to `.env` or which setting to change, and can't be customized from `docker-compose.yml` itself; a thin wrapper is the only way to make the *actual* user-facing command give an actionable message. Rejected a standalone shell script (`scripts/up.sh`) as the primary interface — `make` is the more conventional, discoverable entrypoint, and this sets the pattern M0.3 extends with a `test` target.
 - **Port-conflict detection by inspecting the actual network binding, not the `up -d` exit code.** Manual testing surfaced a real bug: `docker compose up -d` can exit 0 even when the host port failed to publish — the container starts, but `NetworkSettings.Ports` for that port is silently `[]`. The original implementation only grepped `up -d`'s captured output for "port is already allocated," which is absent in this failure mode, producing a false-positive green in exactly the scenario a real user hit. Fixed by checking `docker inspect`'s `NetworkSettings.Ports` for a non-empty binding after `up -d` returns, regardless of its exit code, and treating an empty binding the same as an explicit bind error. `tests/integration/test_port_conflict.sh` pins this behavior against a real, independently-running occupant container (not another `docker compose up`, since that was the case that produced the false positive).
 - **Shared `scripts/compose_up.sh` / `compose_down.sh`, called by both `make up` and the integration test**, rather than duplicating the retry/detection logic in each. One place owns "how do we know the port bound successfully."
+
+## D003 — Fail-fast test runner discovered by directory convention (2026-07-14)
+
+**Change:** `change/m0.3-test-runner`
+
+**Motivation.** M0.3 needs one documented command (NFR-4) that runs every test in the repo, so future milestones (dbt tests, simulator tests, API tests) don't each need their own bespoke invocation instructions.
+
+**Design delta:** `design/Milestones.md` — M0.3 expanded to the full template.
+
+**Artifacts:** `scripts/run_tests.sh` — discovers and runs `tests/*.sh` (fast tier) then `tests/integration/*.sh` (integration tier), fail-fast. `Makefile` — `test`, `test-fast`, `test-integration` targets. `tests/check_compose_config.sh` — the `docker compose config` check, now a discoverable script rather than an ad-hoc command. `tests/verify_test_runner_fail_fast.sh` — regression test on the runner itself.
+
+**Reversal:** if a future test type (pytest, `dbt test`) doesn't fit the shell-script-glob convention, extend `run_tests.sh` with a second discovery mechanism per tier rather than forcing every tool into a `.sh` wrapper.
+
+**Validation:** choices and rejected alternatives —
+- **Fail-fast, not aggregate-all-failures** — owner's explicit call for this milestone. Stops at the first failing script and skips the rest, trading full-failure visibility for a faster feedback loop. Recorded in Milestones M0.3 as a deliberate, revisitable trade-off rather than a permanent design.
+- **Discovery by directory convention (`tests/*.sh` vs `tests/integration/*.sh`), not an explicit registry file.** A new fast test is picked up automatically by being added to `tests/`; no separate list to keep in sync. Rejected an explicit manifest as unnecessary ceremony at this scale.
+- **`check_compose_config.sh` promoted from an ad-hoc command to a real script** — anything not in a discoverable script doesn't actually get run by `make test`, so it would silently stop being checked. This was found while building M0.3 itself: the fast tier is only as complete as what's actually a file in `tests/`.
+- **A meta-test on the runner's own fail-fast behavior**, not just trusting the implementation — directly modeled on the false-positive lesson from D002 (M0.2's port detection): an infra check that "looks done" can still be silently wrong, so the fail-fast guarantee itself is pinned by a regression test, not just manual verification.
