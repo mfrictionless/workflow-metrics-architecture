@@ -81,7 +81,7 @@ milestone's own acceptance criteria.
   - With Docker stopped, run `make test-integration` — confirm it fails clearly rather than hanging.
   - Temporarily add a broken fast-tier script, run `make test`, confirm it stops there and never reaches the integration tier; remove the fixture after.
 
-### M1: Source ODS and seed data
+### M1: Source ODS and seed data (COMPLETE)
 
 **M1.1 — ODS schema mounted, executed, and validated via compose**
 - **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
