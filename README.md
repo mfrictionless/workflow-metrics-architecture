@@ -12,8 +12,9 @@ Design and implementation for a title/closing **workflow-metrics platform**: mod
 | [Requirements.md](design/Requirements.md) | Product requirements document: problem statement, goals, metrics, and use cases for the working example |
 | [Home-Refinance-Workflow.md](design/Home-Refinance-Workflow.md) | Business process reference: residential refinance closing workflow steps and parties involved |
 | [Technical-Design.md](design/Technical-Design.md) | System architecture: component choices, data model, freshness analysis, and governance approach |
+| [Process.md](design/Process.md) | Working agreement: the milestone loop, milestone template, test strategy, and definition of done |
 | [Decisions.md](design/Decisions.md) | Append-only decision log (D001, D002, …): rationale, design changes, and trade-offs for major decisions |
-| [Milestones.md](design/Milestones.md) | Testable build milestones (M1–M6): units of work with clear test and acceptance criteria |
+| [Milestones.md](design/Milestones.md) | Testable build milestones (M0–M7): units of work with clear test and acceptance criteria |
 
 ### Reference documentation (`docs/`)
 | File | Purpose |

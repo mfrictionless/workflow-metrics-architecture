@@ -12,11 +12,38 @@ Now we will build out an actual working solution with the milestones identified 
 
 ## Build Phase — Testable Units
 
-Phases M1–M6 match the architecture mapping in
+M0 covers repository structure and reproducibility. Phases M1–M6 match the
+architecture mapping in
 [Technical-Design.md §6](Technical-Design.md#6-milestones--architecture-mapping);
 M7 expands the truncated workflow once the pipeline is verified end-to-end.
 Sub-milestones are the granular, independently testable units within a phase —
 build and verify them in order; a phase is done when all its sub-milestones pass.
+
+### M0: Repository structure and single-command pipeline
+
+A monorepo: one `docker-compose.yml` at the repository root composes every
+service as it comes online, and one command runs every test suite. This
+satisfies NFR-4 (reproducibility — "runs from a clean checkout with one
+documented command") in [Requirements.md](Requirements.md). M0 is a standing
+requirement, not a one-and-done milestone: each service or test suite added in
+M1–M7 is wired into the compose file and the test command as part of that
+milestone's own acceptance criteria.
+
+**M0.1 — Repository structure**
+- **Test:** Top-level folders exist for each pipeline component (e.g. `ods/` for the source database DDL, with `simulator/`, `warehouse/` (dbt), `orchestration/` (Airflow), and `consumers/` added as those milestones are built), matching the component names used in [Technical-Design.md §2](Technical-Design.md#2-component-choices)
+- **Acceptance:** A new contributor can locate any component's source by folder name alone, with no cross-referencing needed
+
+**M0.2 — docker-compose.yml at repo root**
+- **Test:** A single `docker-compose.yml` at the repository root defines every currently-implemented service
+- **Acceptance:** `docker compose up` from a clean checkout brings up every implemented service with no manual steps
+
+**M0.3 — M1.1 wired into compose**
+- **Test:** The ODS Postgres service in `docker-compose.yml` automatically applies [ods/ddl/schema.sql](../ods/ddl/schema.sql) on first startup
+- **Acceptance:** `docker compose up` followed by connecting to the ODS shows all 4 tables (`files`, `file_actions`, `parties`, `audit_events`) present, with no manual `psql -f` step
+
+**M0.4 — Single-command test run**
+- **Test:** One documented command runs every test suite across the repo (schema tests, dbt tests, simulator tests, API tests) as each is added
+- **Acceptance:** The command exits 0 only if every component's tests pass; a deliberately broken test in any one component causes the command to fail
 
 ### M1: Source ODS and seed data
 
