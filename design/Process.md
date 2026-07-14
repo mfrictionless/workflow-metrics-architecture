@@ -33,7 +33,7 @@ Each sub-milestone (M0.1, M1.1, …) moves through these steps in order:
 5. **Implement.** Write the minimum functionality to satisfy the milestone —
    nothing speculative (see [CLAUDE.md](../CLAUDE.md) §2).
 6. **Retest the change.** The new tests go green.
-7. **Full regression.** Run the entire suite (see M0.4). A milestone is not done
+7. **Full regression.** Run the entire suite (see M0.3). A milestone is not done
    until every existing test still passes.
 8. **Record and merge.** Update affected design docs, add a
    [Decisions.md](Decisions.md) entry if the milestone made a non-obvious choice,
@@ -77,7 +77,7 @@ to build.
 - **Integration** — tests that need `docker compose` services live (CDC flow,
   end-to-end freshness). Slower; run before merge.
 
-M0.4's single command runs both tiers and exits non-zero if any test fails; a
+M0.3's single command runs both tiers and exits non-zero if any test fails; a
 fast-only path serves the inner loop.
 
 ## Definition of Done
@@ -87,9 +87,9 @@ A sub-milestone is done when **all** of the following hold:
 - [ ] Tests written per the test strategy (logic test-first; infra smoke-checked).
 - [ ] Tests were observed failing for the right reason before implementation (logic).
 - [ ] New tests pass.
-- [ ] Full regression passes (M0.4).
+- [ ] Full regression passes (M0.3).
 - [ ] The service and its tests are wired into `docker-compose.yml` and the
-      single test command (M0.2, M0.4).
+      single test command (M0.2, M0.3).
 - [ ] Affected design docs updated; a [Decisions.md](Decisions.md) entry added if a
       non-obvious choice was made.
 - [ ] Committed and fast-forward merged to `main`.

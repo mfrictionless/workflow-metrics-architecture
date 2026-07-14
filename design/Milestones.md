@@ -32,10 +32,10 @@ milestone's own acceptance criteria.
 **M0.1 — Repository structure**
 - **Test:** The repository follows a documented monorepo layout — one top-level folder per pipeline component, named after its [Technical-Design.md §2](Technical-Design.md#2-component-choices) component, plus a layout map recorded in the [README](../README.md). Component folders are created by the milestone that first needs them (lazy, not speculative — see Out-of-scope); `ods/` already exists from M1.1.
 - **Acceptance:** A new contributor can locate any component's source by folder name alone, with no cross-referencing needed; the structure test (below) passes in the fast suite.
-- **Dependencies:** None — foundational. M0.2–M0.4 build on this layout.
+- **Dependencies:** None — foundational. M0.2–M0.3 build on this layout.
 - **Out-of-scope:**
   - Creating empty placeholder folders for components not yet built — each is added by its own milestone, to avoid speculative structure.
-  - The root `docker-compose.yml` (M0.2) and the single-command test runner (M0.4).
+  - The root `docker-compose.yml` (M0.2) and the single-command test runner (M0.3).
   - Any implementation code inside the component folders.
 - **Layout:** The authoritative folder map and conventions live in [Technical-Design.md §9](Technical-Design.md#9-repository-layout) — a living map whose Status column flips from `planned` to `exists` as each folder is created. Only `ods/` exists today.
 - **Automated Test Plan:**
@@ -47,9 +47,9 @@ milestone's own acceptance criteria.
 **M0.2 — docker-compose.yml at repo root**
 - **Test:** A `docker-compose.yml` and a companion `.env` at the repository root define the ODS PostgreSQL service. `.env` holds the adjustable settings (host port, db name, user, password) with committed defaults — no manual setup required for a clean checkout, but a user can edit `.env` to fit their own environment (e.g., already running Postgres on 5432). `make up` / `make down` are the documented entrypoints, not bare `docker compose` commands, because a port conflict must fail with a message pointing at `.env` rather than Docker's raw daemon error.
 - **Acceptance:** From a clean checkout, `make up` brings the ODS container up on the default settings and it accepts connections (`pg_isready` succeeds) within a bounded startup window; overriding an `.env`-sourced value (e.g. the database name) and re-running picks up the new value with no changes to `docker-compose.yml`; `make down` tears down cleanly with no orphaned volumes; if `ODS_POSTGRES_PORT` is already occupied by anything on the host — a Docker container or a native process — `make up` fails fast with a message naming the port and pointing at `.env`, rather than surfacing Docker's raw "port is already allocated" error.
-- **Dependencies:** M0.1 (folder layout — `ods/` already exists and holds the DDL M0.3 wires in).
+- **Dependencies:** M0.1 (folder layout — `ods/` already exists and holds the DDL M1.2 wires in).
 - **Out-of-scope:**
-  - Applying `ods/ddl/schema.sql` on startup — M0.3.
+  - Applying `ods/ddl/schema.sql` on startup — that's M1.2, since it's ODS-specific wiring rather than general compose setup.
   - Any other service (simulator, Kafka, warehouse, Airflow, consumers) — added by their own milestones per §9's lazy-creation convention.
   - Real secrets management — `.env` holds local-dev-only defaults, called out via comment as not for production use.
 - **Automated Test Plan:**
@@ -58,16 +58,12 @@ milestone's own acceptance criteria.
   - *Integration:* `tests/integration/test_port_conflict.sh` — regression test for a bug found in manual testing: occupies a port with an independently-running container, then asserts `scripts/compose_up.sh` fails (not a false-positive success) with a message naming `ODS_POSTGRES_PORT`.
 - **Manual Test Plan:**
   - `make up`, confirm no errors in logs.
-  - `psql` in and confirm connection succeeds (no tables yet — that's M0.3).
+  - `psql` in and confirm connection succeeds (no tables yet — that's M1.2).
   - Edit `.env`, change `ODS_POSTGRES_PORT`, re-run, confirm the new port is what's listening.
   - `make down`, confirm volume removal (`docker volume ls`).
   - With the configured port already occupied by something else, confirm `make up` fails with a message pointing at `.env` — not Docker's raw daemon error.
 
-**M0.3 — M1.1 wired into compose**
-- **Test:** The ODS Postgres service in `docker-compose.yml` automatically applies [ods/ddl/schema.sql](../ods/ddl/schema.sql) on first startup
-- **Acceptance:** `docker compose up` followed by connecting to the ODS shows all 4 tables (`files`, `file_actions`, `parties`, `audit_events`) present, with no manual `psql -f` step
-
-**M0.4 — Single-command test run**
+**M0.3 — Single-command test run**
 - **Test:** One documented command runs every test suite across the repo (schema tests, dbt tests, simulator tests, API tests) as each is added
 - **Acceptance:** The command exits 0 only if every component's tests pass; a deliberately broken test in any one component causes the command to fail
 
@@ -77,11 +73,25 @@ milestone's own acceptance criteria.
 - **Test:** `files`, `file_actions`, `parties`, `audit_events` tables created per the schema in [Technical-Design.md §3](Technical-Design.md#3-data-model)
 - **Acceptance:** DDL runs clean on a fresh PostgreSQL instance; foreign keys enforced
 
-**M1.2 — Seed data (truncated workflow)**
+**M1.2 — M1.1 wired into compose**
+- **Test:** The `ods-postgres` service in `docker-compose.yml` mounts `ods/ddl/` into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty), so `schema.sql` applies automatically on first startup.
+- **Acceptance:** From a clean checkout, `make up` brings up the ODS with all 4 tables (`files`, `file_actions`, `parties`, `audit_events`) present and their foreign keys/CHECK constraints intact — no manual `psql -f` step, matching what M1.1 verified by hand. Stopping and restarting the container (without `make down`, i.e. the volume persists) does not re-run or error on the init script, per Postgres's own init-once behavior.
+- **Dependencies:** M0.2 (compose file + `.env` + `make up`/`make down`); M1.1 (the schema itself, already verified correct against a live container).
+- **Out-of-scope:**
+  - Seeding data — that's M1.3.
+  - Schema migrations/versioning beyond this single `schema.sql` — out of scope for the working example.
+  - Any behavior when the data directory is *not* empty (e.g. changing `schema.sql` after a volume already exists) — Postgres's init-once semantics mean that's a `make down -v`-and-recreate case, not something M1.2 needs to handle specially.
+- **Automated Test Plan:**
+  - *Integration only* — this can't be verified without a real container: `tests/integration/test_schema_init.sh` brings the stack up via `scripts/compose_up.sh`, waits for readiness, then queries `information_schema.tables` for all 4 expected tables and spot-checks that the `parties_role_check` and `file_actions_action_code_check` CHECK constraints exist (reusing what M1.1 already proved manually, now as an automated regression). Tears down after.
+- **Manual Test Plan:**
+  - `make up` from a clean checkout, `psql`/`\dt` in, confirm all 4 tables exist without running `schema.sql` by hand.
+  - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
+
+**M1.3 — Seed data (truncated workflow)**
 - **Test:** Seed a truncated 4-step workflow — **Apply → Process → Sign → Record and close** (steps 1, 3, 9, 12 of the full 12-step model in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md)) — for at least one closed file.
 - **Acceptance:** Query the ODS directly and retrieve all 4 steps for the file with correct timestamps, RACI-consistent sender/receiver, and party assignments
 
-**M1.3 — Python simulator (truncated workflow)**
+**M1.4 — Python simulator (truncated workflow)**
 - **Test:** Simulator generates new `files` and `file_actions` rows on a repeatable cadence, following the same 4-step model and RACI rules as seed data
 - **Acceptance:** Running the simulator for N minutes produces N files' worth of well-formed rows (no orphaned `file_actions`, custody chain intact per A2 in [Requirements.md](Requirements.md))
 
@@ -97,7 +107,7 @@ milestone's own acceptance criteria.
 
 **M2.3 — Debezium source connector**
 - **Test:** Debezium Postgres connector deployed to Kafka Connect; captures ODS changes as JSON
-- **Acceptance:** An ODS write (from M1.2 or M1.3) appears as a message on the corresponding Kafka topic within seconds, with correct before/after payload
+- **Acceptance:** An ODS write (from M1.3 or M1.4) appears as a message on the corresponding Kafka topic within seconds, with correct before/after payload
 
 **M2.4 — Warehouse PostgreSQL**
 - **Test:** Second, separate PostgreSQL instance provisioned for Raw/Silver/Gold/Mart
@@ -123,7 +133,7 @@ milestone's own acceptance criteria.
 
 **M3.4 — Metric Mart: turnaround (U1)**
 - **Test:** Mart computes per-step turnaround (`received_at − sent_at`) and aggregates (mean, p90) by step, for closed/live/positive-duration steps only (FR-3)
-- **Acceptance:** Hand-computed turnaround for the M1.2 seed file matches the Mart's output exactly
+- **Acceptance:** Hand-computed turnaround for the M1.3 seed file matches the Mart's output exactly
 
 ### M4: Governed analyst surface
 
@@ -156,7 +166,7 @@ milestone's own acceptance criteria.
 ### M6: Orchestration and end-to-end freshness
 
 **M6.1 — Airflow: simulator DAG**
-- **Test:** Airflow DAG triggers the Python simulator (M1.3) on a fixed schedule
+- **Test:** Airflow DAG triggers the Python simulator (M1.4) on a fixed schedule
 - **Acceptance:** DAG runs succeed on schedule; new ODS rows appear after each run
 
 **M6.2 — Airflow: dbt run DAG**

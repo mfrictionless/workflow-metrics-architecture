@@ -240,7 +240,7 @@ created lazily by the milestone that first needs them (nothing speculative), and
 | Folder | Component ([§2](#2-component-choices)) | Created by | Status |
 |--------|-----------------------------------------|------------|--------|
 | `ods/` | PostgreSQL ODS (source DDL) | M1.1 | exists |
-| `simulator/` | Python simulator | M1.3 | planned |
+| `simulator/` | Python simulator | M1.4 | planned |
 | `streaming/` | Kafka (KRaft) broker + Kafka Connect worker | M2.2 | planned |
 | `cdc/` | Debezium source connector + JDBC sink connector configs | M2.3 / M2.5 | planned |
 | `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | M2.4 / M3 | planned |
@@ -254,4 +254,4 @@ created lazily by the milestone that first needs them (nothing speculative), and
   (`ods/tests/` SQL assertions, `simulator/tests/` pytest, dbt tests inside
   `warehouse/`). Cross-component and repo-meta tests — the M0.1 structure check,
   end-to-end freshness — live at the repository root under `tests/`.
-- **Root** — holds `docker-compose.yml` (M0.2) and the single-command test runner (M0.4).
+- **Root** — holds `docker-compose.yml` (M0.2) and the single-command test runner (M0.3).
