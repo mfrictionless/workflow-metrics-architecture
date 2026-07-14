@@ -1,6 +1,6 @@
 # Decision Log
 
-Append-only record of *why* each Change happened. Numbered D001, D002, D003, … — newest at the bottom. See [`Process.md`](./Process.md) for the workflow and the field definitions.
+Append-only record of *why* each Change happened. Numbered D001, D002, D003, … — newest at the bottom. See [`PROCESS.md`](../PROCESS.md) for the workflow and the field definitions.
 
 **Entry template:**
 ```markdown
@@ -110,3 +110,27 @@ against the source matrix are now aligned, but the matrix itself (R/A/C/I per st
 proposed model — validate it against how AMOD's loan officers, processors, and title
 agents actually work today. Also confirm a system service principal is an acceptable way
 to model `received_user_id` on the terminal step (see A5).
+
+## D003 — Initialize root working guidance for Codex (2026-07-13)
+
+**Change:** `change/initialize-codex`
+
+**Motivation.** Codex needs repository-level instructions that identify the authoritative
+project documents and carry current domain and architecture constraints into future work.
+The Change-unit process is the shared working agreement, so it belongs at the repository
+root alongside the Codex guidance rather than under the design artifacts it governs.
+
+**Design delta:** `AGENTS.md` (new repository-wide Codex guidance); `PROCESS.md` (moved
+from `design/Process.md` to the repository root); process links reconciled in `README.md`,
+`CLAUDE.md`, `design/Requirements.md`, and `design/Decisions.md`.
+
+**Artifacts:** root `AGENTS.md` and `PROCESS.md` working-agreement files.
+
+**Reversal:** remove `AGENTS.md` if Codex-specific guidance moves to another maintained
+configuration surface. Move `PROCESS.md` back under `design/` and restore its inbound and
+outbound links if the process should again be treated as a design artifact.
+
+**Validation:** N/A: descriptive-only. The guidance consolidates existing requirements,
+decisions, process rules, and writing standards without selecting a stack component or
+changing the platform design. The owner confirmed `PROCESS.md` belongs at the repository
+root because it determines how the owner and Codex work together.

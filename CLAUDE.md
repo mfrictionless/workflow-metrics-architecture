@@ -1,91 +1,20 @@
 # CLAUDE.md
 
-You are my assistant on a data-engineering project. I interviewed for a principal
-data-engineer role at a small title/closing technology company — they make the
-clear-to-close decision on titles faster and with more confidence, and are now
-working to improve the whole mortgage-closing process. The interview is done; we
-are now building a working example of the solution.
+*Purpose*: Build out a working exmaple of the pipeline described in the interview to learn from the problem presented.
 
-## Where we are
+## References
 
-- **Prep (done):** broad, thin-guidance research, captured in [docs/](docs/) — the
-  three block docs `dual-postgres-replication`, `modeling-and-governance`, and
-  `pipeline-and-agent-consumption`.
-- **Interview (done):** completed with the hiring manager.
-- **Build (now):** turn what I learned into a working example, planned in
-  [design/](design/) — requirements first, then milestones.
+[Design Documents](design/): Product Requirements, Milestones, Technical Design Documents, and the decision log reside here.
 
-## Build constraints
+[Interview Prep Documents](docs): This is a collection of documents used during the prep for my interview and were edited during.  They are reference only and will not steer this repository's direction
 
-- **Open source only.** Stack components must not require payment — every tool must
-  be freely runnable. **One exception:** the agent's AI model may be a paid or
-  proprietary model.
-- **Source / ODS layer is PostgreSQL.**
+## Editing Standards
 
-## Process — enforced
-
-[design/Process.md](design/Process.md) governs how we work: small, bounded, recorded
-Changes, each on its own branch, each with a decision-log entry in
-[design/Decisions.md](design/Decisions.md). The rule is *if it's a decision, it's
-justified and recorded.* Follow it.
-
-## Writing standards
-
-- **Define every acronym on first use** — spell it out, then use the short form.
-  The only exceptions are ones common in everyday speech (for example, "ASAP").
-- **Any document that uses acronyms carries a Definitions section** listing them.
-- **Write at a college reading level** — precise and plain, neither dumbed down nor
-  inflated.
-- **Be succinct** — say it once, clearly, and cut the filler.
-
-## Scenario & naming (fictional)
-
-Use these names in every document going forward:
-
-- **AMOD** — the company (the title and closing technology firm in the scenario).
-- **Autoclose** — AMOD's application, and the source system we model (its operational
-  data store is the `files` / `file_actions` schema in
-  [docs/modeling-and-governance.md](docs/modeling-and-governance.md)).
-
-Scenario assumptions we treat as given:
-
-- **`users` are both internal and external.** The `users` table holds AMOD
-  operators and outside parties alike.
-- **Parties are the borrower, seller, and agent on a file** (as the operational
-  schema describes). They log into Autoclose to see where their file is in the
-  process.
-- **External users become parties by signing up** for Autoclose. Signup creates a
-  `parties` record (`party_id`) linked to their `users` record.
-- **The consumer agent nudges parties** about actions on their *own* file that are
-  nearing or past their service-level target. It surfaces and reminds; it does not
-  act on the file.
-- **The working example is a residential refinance.** It follows the workflow in
-  [docs/home-refinance-closing-workflow.md](docs/home-refinance-closing-workflow.md);
-  the external customer party is the **borrower** (a refinance has no seller or
-  buyer's agent), so the borrower is who the agent nudges.
-- **There is no "branch" concept** — scope is the party's own file, not an office
-  or team.
-
-## Interview background (context)
-
-### Interview Agenda
-
-Agenda (~60 min)
-
-Intro - 5 min - Expectations, repo workflow
-Block 1 - 15 min - Modeling & governance  AI allowed
-Block 2 - 20 min - Replication design  no AI
-Block 3 - 18 min - Pipeline → consumption path  no AI
-Wrap - 2 min - Repo URL + your questions
-
-### Interview Guidance
-
-I'll walk through a synthetic scenario on the call (fictional title/closing domain ). Ask clarifying questions before you design; state assumptions in the repo as you go.
-
-What we're grading: assumptions, tradeoffs, and why. Tie your answers to the scenario we discuss, not a generic platform pitch. If something is ambiguous, say what you'd validate with app eng, security, or SRE.  At the end, send the repo link in chat (grant access if private). You may optional polish over the weekend if you want and you can ping me if anything material changes.
-
-Let me know if this answers your questions or if you have any remaining Qs after reading through this.  Cloud agnostic is fine, centered around your provider of choice is also fine. You can speak in Databricks, AWS Redshift, Snowflake, CelerData (Pheonix now?), etc.  
-
+- Define every acronym on first use in the [README](README.md) within the `Definitions` section. Everyday terms are the only exception.
+- Write precise, plain, college-level prose. Be succinct and avoid generic platform claims that are not tied to this scenario.
+- Preserve stable headings and existing Markdown style. Use relative links for repository
+  documents, keep tables readable, and end text files with a newline.
+- Adhere to the DRY principle in your writing.  Reference other using links where substantial context in important
 
 # Agent Behavior
 

@@ -5,7 +5,7 @@
 > **Format.** This is a lightweight product requirements document (PRD): a short
 > statement of *what* we are building and *why*, before any *how*. The section
 > headings are stable; the content is filled in and revised as recorded Changes
-> (see [Process.md](./Process.md)). Acronyms are spelled out on first use and
+> (see [PROCESS.md](../PROCESS.md)). Acronyms are spelled out on first use and
 > collected in [§10 Definitions](#10-definitions).
 
 ---
