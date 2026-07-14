@@ -1,7 +1,7 @@
 # Workflow metrics
 
 ## Summary
-Design and implmentation for a title/closing **workflow-metrics platform**: model operational workflow data into a governed mart, and serve the metrics to a read-only retrieval agent.
+Design and implementation for a title/closing **workflow-metrics platform**: model operational workflow data into a governed mart, and serve the metrics to a read-only retrieval agent.
 
 
 ## Repo map
@@ -28,3 +28,28 @@ Design and implmentation for a title/closing **workflow-metrics platform**: mode
 |------|---------|
 | [CLAUDE.md](CLAUDE.md) | Project instructions: editing standards, agent behavior guidelines, and references |
 | [README.md](README.md) | This file: project overview and repository map |
+
+
+## 10. Definitions
+
+- **AMOD** — a title and closing technology company; the system owner in this working example.
+- **ALTA** — American Land Title Association; title-industry data standards.
+- **BI** — business intelligence (dashboards and reporting tools).
+- **CD** — Closing Disclosure; the final settlement figures delivered to the borrower
+  before signing.
+- **CDC** — change data capture; streaming row-level changes out of a database.
+- **DB-A / DB-B** — the two application PostgreSQL databases that make up the ODS.
+- **DDL** — data definition language (the `CREATE TABLE` half of SQL).
+- **GLBA** — Gramm–Leach–Bliley Act; U.S. law governing financial-data privacy.
+- **HOA** — homeowners association; typically a requirement when a residential property is in a community with HOA governance.
+- **MISMO** — Mortgage Industry Standards Maintenance Organization; the mortgage
+  data dictionary and schema standard.
+- **NPI** — nonpublic personal information (the data class GLBA protects).
+- **ODS** — operational data store; the live application database we source from.
+- **PII** — personally identifiable information.
+- **PRD** — product requirements document (this file's format).
+- **RACI** — Responsible, Accountable, Consulted, Informed; a responsibility-assignment
+  model (R performs, A owns the outcome, C is consulted, I is notified).
+- **SLA** — service-level agreement; a per-step or per-stage time target.
+- **SQL** — structured query language.
+- **WIP** — work in progress (open, unfinished files).
