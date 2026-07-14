@@ -11,8 +11,9 @@ Design and implementation for a title/closing **workflow-metrics platform**: mod
 |------|---------|
 | [Requirements.md](design/Requirements.md) | Product requirements document: problem statement, goals, metrics, and use cases for the working example |
 | [Home-Refinance-Workflow.md](design/Home-Refinance-Workflow.md) | Business process reference: residential refinance closing workflow steps and parties involved |
+| [Technical-Design.md](design/Technical-Design.md) | System architecture: component choices, data model, freshness analysis, and governance approach |
 | [Decisions.md](design/Decisions.md) | Append-only decision log (D001, D002, …): rationale, design changes, and trade-offs for major decisions |
-| [Milestones.md](design/Milestones.md) | Milestone roadmap and context for the working example project |
+| [Milestones.md](design/Milestones.md) | Testable build milestones (M1–M6): units of work with clear test and acceptance criteria |
 
 ### Reference documentation (`docs/`)
 | File | Purpose |
@@ -38,7 +39,6 @@ Design and implementation for a title/closing **workflow-metrics platform**: mod
 - **CD** — Closing Disclosure; the final settlement figures delivered to the borrower
   before signing.
 - **CDC** — change data capture; streaming row-level changes out of a database.
-- **DB-A / DB-B** — the two application PostgreSQL databases that make up the ODS.
 - **DDL** — data definition language (the `CREATE TABLE` half of SQL).
 - **GLBA** — Gramm–Leach–Bliley Act; U.S. law governing financial-data privacy.
 - **HOA** — homeowners association; typically a requirement when a residential property is in a community with HOA governance.

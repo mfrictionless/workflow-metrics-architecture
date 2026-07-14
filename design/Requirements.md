@@ -72,8 +72,7 @@ Concrete, testable scenarios. Each drives functional requirements below.
 
 What the system must *do*.
 
-- **FR-1 — ODS topology & cross-database reads.** The operational store is
-  PostgreSQL will support a simulated load of workflow data
+- **FR-1 — ODS topology.** The operational store is PostgreSQL; it will support a simulated load of workflow data (files, file_actions, audit_events)
 - **FR-2 — Capture changes.** Land ODS changes into the raw layer via CDC, without
   adding load to a write primary.
 - **FR-3 — Turnaround (U1).** Compute per-step turnaround on closed, live,
