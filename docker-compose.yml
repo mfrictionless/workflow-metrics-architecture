@@ -22,6 +22,33 @@ services:
       - ods_data:/var/lib/postgresql/data
       - ./ods/ddl:/docker-entrypoint-initdb.d:ro
 
+  # Single-node Kafka broker, KRaft mode (no Zookeeper) -- combined
+  # broker+controller. Two listeners: PLAINTEXT for other compose services
+  # (e.g. Kafka Connect, M2.3), HOST for host-side tools via KAFKA_BROKER_PORT
+  # in .env. See design/Milestones.md M2.2.
+  kafka:
+    image: apache/kafka:latest
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,HOST://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:${KAFKA_BROKER_PORT}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Single-broker dev setup: internal topics need replication factor 1,
+      # not the default 3, or their creation hangs waiting for replicas that
+      # will never exist.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "${KAFKA_BROKER_PORT}:9094"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
   # On-demand job, not a long-running service -- `profiles` keeps it out of a
   # bare `docker compose up`; run explicitly via `docker compose run simulator`
   # (make simulate), which targets a named service regardless of profile.
@@ -40,3 +67,4 @@ services:
 
 volumes:
   ods_data:
+  kafka_data:

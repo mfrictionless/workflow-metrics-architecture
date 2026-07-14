@@ -151,8 +151,21 @@ milestone's own acceptance criteria.
   - Restart the container (not `make down`), confirm no errors and the slot/publication persist unduplicated.
 
 **M2.2 — Kafka (KRaft)**
-- **Test:** Single-node Kafka broker running in KRaft mode; one topic per source table
-- **Acceptance:** Broker starts without Zookeeper; topics list shows `files`, `file_actions`, `parties`, `audit_events` topics
+- **Test:** A single-node Kafka broker (`apache/kafka`, official image; combined broker+controller, KRaft mode — no Zookeeper) starts via `docker-compose.yml`, with its host-facing listener port exposed via `.env` (`KAFKA_BROKER_PORT`, matching the `ODS_POSTGRES_PORT` pattern). Proves basic broker health and topic management — not the final CDC topic topology (Debezium, M2.3, creates its own topics with its own naming convention).
+- **Acceptance:** `make up` brings the broker up and it accepts client/admin connections; creating 4 topics (`files`, `file_actions`, `parties`, `audit_events`) and listing them succeeds; no Zookeeper process/container exists anywhere in the stack. Restarting the container without `make down` preserves the cluster ID and created topics (confirmed in manual testing — no errors, no re-formatting).
+- **Dependencies:** M0.2 (compose + `.env` + `make up`/`make down`).
+- **Out-of-scope:**
+  - The actual CDC topics Debezium will produce into (its own `topic.prefix.schema.table` naming, defined in M2.3) — these 4 health-check topics may end up unused, which is fine.
+  - The Kafka Connect worker and connector plugins (Debezium source, JDBC sink) — a separate image/container decided in M2.3/M2.5, independent of the broker image choice.
+  - Multi-broker / production topology — single-node only.
+  - Schema Registry — already decided against (Technical-Design.md §2: plain JSON, no registry).
+  - Full Kafka-protocol-level verification of the host-facing listener's advertised-address redirect — verified only via raw TCP reachability and a compose-network container client, since no native Kafka client was available on the test host to fully exercise the external-client metadata path.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_kafka.sh` — brings the broker up, waits for it to accept connections (`kafka-broker-api-versions.sh`), creates the 4 topics, asserts all 4 appear in the topic list, and confirms no Zookeeper container is running anywhere in the stack.
+- **Manual Test Plan:**
+  - `make up`, `docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list` — confirm the 4 topics.
+  - Restart the container (not `make down`), confirm topics persist and no cluster-ID/formatting errors appear in logs.
+  - `streaming/` (per Technical-Design.md §9) was not created for this milestone — Kafka's entire KRaft configuration is expressible via `docker-compose.yml` environment variables, no custom Dockerfile or config file needed. Left `planned`; M2.3 (Kafka Connect worker + connector configs) is the more likely milestone to first need real files there.
 
 **M2.3 — Debezium source connector**
 - **Test:** Debezium Postgres connector deployed to Kafka Connect; captures ODS changes as JSON
