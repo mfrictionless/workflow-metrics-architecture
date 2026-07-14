@@ -80,3 +80,20 @@ Append-only record of *why* each Change happened. Numbered D001, D002, D003, …
 - **Discovery by directory convention (`tests/*.sh` vs `tests/integration/*.sh`), not an explicit registry file.** A new fast test is picked up automatically by being added to `tests/`; no separate list to keep in sync. Rejected an explicit manifest as unnecessary ceremony at this scale.
 - **`check_compose_config.sh` promoted from an ad-hoc command to a real script** — anything not in a discoverable script doesn't actually get run by `make test`, so it would silently stop being checked. This was found while building M0.3 itself: the fast tier is only as complete as what's actually a file in `tests/`.
 - **A meta-test on the runner's own fail-fast behavior**, not just trusting the implementation — directly modeled on the false-positive lesson from D002 (M0.2's port detection): an infra check that "looks done" can still be silently wrong, so the fail-fast guarantee itself is pinned by a regression test, not just manual verification.
+
+## D004 — ODS schema mounted into Postgres auto-init; enum rejection verified by constraint name (2026-07-14)
+
+**Change:** `change/m1.1-schema-init`
+
+**Motivation.** M1.1 needs `make up` to bring up an ODS with the correct schema fully applied — tables, FKs, ALL CAPS enum constraints, per-column comments — with no manual `psql -f` step, closing the gap between the schema built in isolation (earlier M1.1 work, before M0 existed) and the compose-based workflow M0 established.
+
+**Design delta:** none (`docker-compose.yml` is an artifact). `design/Milestones.md` M1.1 already specified this shape from the draft stage.
+
+**Artifacts:** `docker-compose.yml` — mounts `./ods/ddl:/docker-entrypoint-initdb.d:ro` on the `ods-postgres` service, using Postgres's official image's auto-init mechanism. `tests/integration/test_schema_init.sh` — verifies the mount, all 4 tables, FKs, ALL CAPS enum enforcement (by constraint name, not just "any failure"), and full column-comment coverage.
+
+**Reversal:** if a second DDL file is ever needed, alphabetical execution order in `/docker-entrypoint-initdb.d/` determines sequence — name files accordingly (`001_...`, `002_...`) rather than relying on directory listing order.
+
+**Validation:** choices and rejected alternatives —
+- **Read-only mount (`:ro`)** — the container only ever needs to read `schema.sql`; nothing it does should write back to the source tree.
+- **Enum-rejection assertions verify the specific CHECK constraint name in the error output, not just "the insert failed."** An earlier version of the test used "did the command fail" as the sole signal — but a failure for an *unrelated* reason (e.g. a bad `file_id`) would count as a false pass, hiding a real constraint regression. Found in this very milestone: a bug in the test's own setup (below) caused exactly that kind of unrelated failure, and the looser check would have masked it.
+- **`psql -t` (tuples-only) does not suppress the `INSERT 0 1` completion tag for `INSERT...RETURNING`.** A test helper did `file_id=$(psql -t -c "INSERT ... RETURNING file_id")`, and the captured value silently became `"1INSERT01"` (the row value concatenated with the command tag) after whitespace-stripping — corrupting every downstream query that used `$file_id` for unrelated reasons, not an enum-constraint failure. Fixed by wrapping the insert in `WITH ins AS (INSERT ... RETURNING file_id) SELECT file_id FROM ins;`, which psql treats as a pure `SELECT` and `-t` suppresses correctly. Caught by the stricter constraint-name check above, not by inspection — another instance of the D002/D003 pattern: an assertion needs to verify the *right* thing failed, not just *that* something failed.
