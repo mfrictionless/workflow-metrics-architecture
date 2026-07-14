@@ -1,7 +1,7 @@
 # Workflow metrics — platform design spike
 **Candidate:** Michael Leslie
 **Date:** 2026-07-10
-**Session:** Doma Principal Data Platform Engineer (1 hour)
+**Session:** Principal Data Platform Engineer (1 hour)
 
 ## Summary
 A design spike for a title/closing **workflow-metrics platform**: model operational
