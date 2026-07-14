@@ -12,6 +12,110 @@ Now we will build out an actual working solution with the milestones identified 
 
 ## Build Phase — Testable Units
 
+Phases M1–M6 match the architecture mapping in
+[Technical-Design.md §6](Technical-Design.md#6-milestones--architecture-mapping);
+M7 expands the truncated workflow once the pipeline is verified end-to-end.
+Sub-milestones are the granular, independently testable units within a phase —
+build and verify them in order; a phase is done when all its sub-milestones pass.
+
 ### M1: Source ODS and seed data
-- **Test:** ODS schema (files, file_actions, audit_events) created and seeded with a complete refinance workflow (12 steps, from Application to Recording)
-- **Acceptance:** Can query ODS directly and retrieve all steps for a single file with correct timestamps and party assignments
+
+**M1.1 — ODS schema**
+- **Test:** `files`, `file_actions`, `parties`, `audit_events` tables created per the schema in [Technical-Design.md §3](Technical-Design.md#3-data-model)
+- **Acceptance:** DDL runs clean on a fresh PostgreSQL instance; foreign keys enforced
+
+**M1.2 — Seed data (truncated workflow)**
+- **Test:** Seed a truncated 4-step workflow — **Apply → Process → Sign → Record and close** (steps 1, 3, 9, 12 of the full 12-step model in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md)) — for at least one closed file.
+- **Acceptance:** Query the ODS directly and retrieve all 4 steps for the file with correct timestamps, RACI-consistent sender/receiver, and party assignments
+
+**M1.3 — Python simulator (truncated workflow)**
+- **Test:** Simulator generates new `files` and `file_actions` rows on a repeatable cadence, following the same 4-step model and RACI rules as seed data
+- **Acceptance:** Running the simulator for N minutes produces N files' worth of well-formed rows (no orphaned `file_actions`, custody chain intact per A2 in [Requirements.md](Requirements.md))
+
+### M2: CDC and raw landing
+
+**M2.1 — Postgres logical replication**
+- **Test:** ODS configured with `wal_level=logical`; a replication slot and publication exist for the source tables
+- **Acceptance:** `pg_replication_slots` shows an active slot; a manual `INSERT` produces a decodable WAL change
+
+**M2.2 — Kafka (KRaft)**
+- **Test:** Single-node Kafka broker running in KRaft mode; one topic per source table
+- **Acceptance:** Broker starts without Zookeeper; topics list shows `files`, `file_actions`, `parties`, `audit_events` topics
+
+**M2.3 — Debezium source connector**
+- **Test:** Debezium Postgres connector deployed to Kafka Connect; captures ODS changes as JSON
+- **Acceptance:** An ODS write (from M1.2 or M1.3) appears as a message on the corresponding Kafka topic within seconds, with correct before/after payload
+
+**M2.4 — Warehouse PostgreSQL**
+- **Test:** Second, separate PostgreSQL instance provisioned for Raw/Silver/Gold/Mart
+- **Acceptance:** Warehouse instance is reachable and distinct from the ODS instance; confirms FR-2 (CDC adds no load to the write primary)
+
+**M2.5 — JDBC sink connector**
+- **Test:** Kafka Connect JDBC sink connector lands topic messages into Raw tables in the warehouse
+- **Acceptance:** Raw tables mirror ODS row counts after a batch of simulator writes; `_cdc_op`, `_cdc_ts`, `_sink_ts` populated per row
+
+### M3: Metric compute (dbt)
+
+**M3.1 — dbt project scaffold**
+- **Test:** dbt Core project connects to the warehouse Postgres; `dbt debug` passes
+- **Acceptance:** Project runs against Raw tables as dbt sources with no connection errors
+
+**M3.2 — Silver models**
+- **Test:** Silver models deduplicate redelivered Kafka records and resolve out-of-order arrival by `_cdc_ts`, producing one current row per `file_id` / `file_action_id`
+- **Acceptance:** `dbt test` on Silver enforces uniqueness on the entity key; a manually duplicated Raw row collapses to one Silver row
+
+**M3.3 — Gold models**
+- **Test:** Gold joins `file_actions` to `files` and `parties`, deriving step number and party role per step
+- **Acceptance:** Gold row count equals Silver `file_actions` row count (1:1); every row resolves a non-null step number and role
+
+**M3.4 — Metric Mart: turnaround (U1)**
+- **Test:** Mart computes per-step turnaround (`received_at − sent_at`) and aggregates (mean, p90) by step, for closed/live/positive-duration steps only (FR-3)
+- **Acceptance:** Hand-computed turnaround for the M1.2 seed file matches the Mart's output exactly
+
+### M4: Governed analyst surface
+
+**M4.1 — Analyst query interface**
+- **Test:** SQL view/query interface exposes `step_turnaround_summary` (mean, p90, count by step) with no per-file or per-party detail
+- **Acceptance:** Analyst can answer U1 ("average and 90th-percentile turnaround by step, for closed files") in one query
+
+**M4.2 — PII exclusion**
+- **Test:** Inspect the Mart's analyst-facing views for any user, name, email, or file-identifying column
+- **Acceptance:** No such column exists in the view definition (verified by construction, not just by convention — NFR-2)
+
+### M5: Party-scoped consumer surface
+
+**M5.1 — RLS policies on the Mart**
+- **Test:** PostgreSQL row-level security policies applied to Mart tables, scoping rows to the requesting `party_id`
+- **Acceptance:** Policies exist and are enabled (`rowsecurity = true`) on every party-facing Mart table
+
+**M5.2 — Mocked party authentication**
+- **Test:** A lightweight auth mock maps a test credential to a `party_id` (or set of `party_id`s via `user_party`)
+- **Acceptance:** Two different mock credentials resolve to two different, correct `party_id` sets
+
+**M5.3 — Party consumer API**
+- **Test:** Read-only REST endpoint returns workflow status for the authenticated party's file(s)
+- **Acceptance:** Endpoint returns 200 with expected file data for a valid mock credential
+
+**M5.4 — Row-scoping verification**
+- **Test:** Query the same endpoint with two different party credentials on the same seeded dataset
+- **Acceptance:** Each party sees only their own file(s); neither can retrieve the other's file by id or enumeration (NFR-2)
+
+### M6: Orchestration and end-to-end freshness
+
+**M6.1 — Airflow: simulator DAG**
+- **Test:** Airflow DAG triggers the Python simulator (M1.3) on a fixed schedule
+- **Acceptance:** DAG runs succeed on schedule; new ODS rows appear after each run
+
+**M6.2 — Airflow: dbt run DAG**
+- **Test:** Airflow DAG runs `dbt build` (Silver → Gold → Mart) on an interval short enough to leave headroom in the 10-minute freshness budget
+- **Acceptance:** DAG runs succeed on schedule; Mart reflects new Raw data after each run
+
+**M6.3 — End-to-end freshness**
+- **Test:** Commit a simulated write to the ODS; measure time until it is visible in the analyst Mart view (NFR-1, [§7 success metrics](Requirements.md#7-success-metrics))
+- **Acceptance:** Measured lag is ≤ 10 minutes across at least 3 trials; the dominant latency source (dbt run interval) is documented
+
+### M7: Expand simulator to full workflow
+
+**M7.1 — Expand to full 12-step workflow**
+- **Test:** Once M1–M6 are verified end-to-end on the truncated workflow, re-seed and re-run the simulator against the full 12-step model
+- **Acceptance:** All downstream milestones (M2–M6) continue to pass unchanged against the full workflow — the truncation should not have required pipeline changes, only additional `file_actions` rows and `action_code` values
