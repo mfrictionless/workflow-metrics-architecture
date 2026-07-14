@@ -8,38 +8,51 @@
 
 ## 1. Architecture overview
 
-End-to-end flow: **ODS source → CDC capture → raw layer → metrics compute → governed read-only consumers**.
+End-to-end flow: **simulator → ODS → CDC (Debezium/Kafka) → raw landing → dbt transforms (Silver → Gold → Mart) → governed read-only consumers**.
 
 ```
-┌─────────────────┐
-│  PostgreSQL ODS │  (files, file_actions, audit_events; write source)
-│  (single DB)    │
-└────────┬────────┘
-         │ (changes)
-         ▼
-┌─────────────────┐
-│      CDC        │  (logical decoding, replication slot)
-│   (capture log) │
-└────────┬────────┘
-         │ (row changes: INSERT, UPDATE, DELETE)
-         ▼
-┌─────────────────┐
-│  Raw / staging  │  (append-only landing; mirrors ODS schema)
-│   (PostgreSQL)  │
-└────────┬────────┘
-         │ (cleaned, deduplicated)
-         ▼
-┌─────────────────┐
-│  Metrics layer  │  (computed, governed; turnaround, SLA status)
-│   (PostgreSQL)  │
-└────────┬────────┘
-         │
-    ┌────┴────────────────┐
-    ▼                     ▼
-┌──────────────┐   ┌──────────────────┐
-│   Analyst    │   │  Party consumer  │
-│  (no PII)    │   │ (row-scoped)     │
-└──────────────┘   └──────────────────┘
+┌───────────────────┐
+│  Python simulator │  (generates file / file_action writes)
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│   PostgreSQL ODS  │  (files, file_actions, audit_events; write source)
+│   (single DB)     │
+└─────────┬─────────┘
+          │ logical decoding (WAL)
+          ▼
+┌───────────────────┐
+│     Debezium      │  (Kafka Connect source connector)
+│  (Postgres → Kafka)│
+└─────────┬─────────┘
+          │ JSON, no schema registry
+          ▼
+┌───────────────────┐
+│  Kafka (KRaft)    │  (topics: one per source table)
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Kafka Connect      │  (JDBC sink connector)
+│  JDBC Sink         │
+└─────────┬─────────┘
+          ▼
+┌─────────────────────────────────────────────┐
+│         Warehouse PostgreSQL (separate       │
+│              instance from ODS)              │
+│                                               │
+│   Raw  ──dbt──▶  Silver  ──dbt──▶  Gold  ──▶  Metric Mart │
+└──────────────────────┬────────────────────────┘
+                        │
+                  (orchestrated by Airflow:
+                   simulator cadence + dbt run schedule)
+                        │
+             ┌──────────┴───────────┐
+             ▼                      ▼
+      ┌──────────────┐      ┌──────────────────┐
+      │   Analyst    │      │  Party consumer  │
+      │  (no PII)    │      │  (row-scoped)    │
+      └──────────────┘      └──────────────────┘
 ```
 
 ---
@@ -48,13 +61,19 @@ End-to-end flow: **ODS source → CDC capture → raw layer → metrics compute 
 
 | Component | Choice | Rationale |
 |-----------|--------|-----------|
-| ODS | PostgreSQL (single database) | Source of truth; supports logical decoding for CDC |
-| CDC | PostgreSQL logical decoding + replication slots | Built-in, no external tool; low operational burden |
-| Raw layer | PostgreSQL (same instance as metrics) | Simplifies cross-layer queries; one PostgreSQL instance for this working example |
-| Metrics compute | SQL views + materialized views (or dbt models) | Declarative, version-controlled, reproducible |
-| Governance | Row-level security (RLS) via PostgreSQL policies | Native to PostgreSQL; scopes each party to their file(s) |
-| Analyst consumer | SQL query interface (DBeaver / psql) | Simple read-only access; no PII visible by view definition |
-| Party consumer | REST API + RLS (mocked auth) | Read-only; returns only party's own file(s) |
+| Simulator | Python | Generates simulated file / file_action writes against the ODS on a schedule |
+| ODS | PostgreSQL (single database) | Source of truth; `wal_level=logical` enables CDC |
+| CDC capture | Debezium (Postgres source connector, Kafka Connect) | Mature, open-source; reads the WAL via logical decoding and publishes row changes to Kafka |
+| Streaming backbone | Kafka, KRaft mode (no Zookeeper) | Fewer moving parts to stand up than Zookeeper-based Kafka; one topic per source table |
+| Serialization | Plain JSON, no schema registry | Simplest to run for a working example; schema evolution is manual (acceptable trade-off given NFR-4) |
+| Raw landing | Kafka Connect JDBC sink connector → warehouse PostgreSQL | Writes Kafka topic records into raw tables; separate instance from the ODS so CDC never adds load to the write primary (FR-2) |
+| Transform (Silver/Gold/Mart) | dbt, single project against the warehouse PostgreSQL | Declarative, version-controlled, testable; layers raw → conformed (Silver) → business/dimensional (Gold) → governed Metric Mart |
+| Orchestration | Airflow | Schedules the Python simulator's write cadence and the dbt run interval; Debezium and Kafka Connect run as always-on services outside Airflow's control |
+| Governance | Row-level security (RLS) via PostgreSQL policies on the Metric Mart | Native to PostgreSQL; scopes each party to their file(s) at the served layer |
+| Analyst consumer | SQL query interface (DBeaver / psql) against the Metric Mart | Simple read-only access; no PII visible by view definition |
+| Party consumer | REST API + RLS (mocked auth) against the Metric Mart | Read-only; returns only the party's own file(s) |
+
+**Assumption — no hard deletes.** `files` and `file_actions` are append-only / status-driven (a file's `status` changes, rows are not deleted). This sidesteps JDBC sink tombstone-record handling, which otherwise requires the Debezium connector to emit tombstones on delete and the sink to be configured with `delete.enabled` and a primary key. Revisit if the ODS model ever hard-deletes a row.
 
 ---
 
@@ -102,11 +121,19 @@ audit_events (
 )
 ```
 
-### Raw layer schema (CDC-landed, read-only)
+### Raw layer schema (JDBC-sink landed, read-only)
 
-Mirrors ODS schema; append-only landing for CDC changes. Tracks `_cdc_op` (INSERT/UPDATE/DELETE), `_cdc_lsn` (log sequence number), `_cdc_ts` (capture timestamp).
+Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp).
 
-### Metrics schema (computed, governed)
+### Silver layer (dbt, conformed)
+
+Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`.
+
+### Gold layer (dbt, business/dimensional)
+
+Joins `file_actions` to `files` and `parties`; derives step-level facts (open/closed, step number from `action_code`, party role). One row per step per file.
+
+### Metric Mart (dbt, governed — final served layer)
 
 ```sql
 -- M3: Turnaround metric
@@ -130,6 +157,8 @@ step_turnaround_summary (
 )
 ```
 
+RLS policies are applied at this layer only — Raw, Silver, and Gold are internal to the pipeline and never queried directly by either consumer.
+
 ---
 
 ## 4. Freshness and timing
@@ -139,15 +168,19 @@ step_turnaround_summary (
 ```
 Source write (0s)
     ↓
-CDC capture (< 1s, logical decoding)
+Debezium capture (< 1s, logical decoding)
     ↓
-Raw land (< 1s)
+Kafka publish (< 1s)
     ↓
-Metric compute (< 5min, scheduled or triggered)
+JDBC sink → Raw land (seconds, connector poll interval)
+    ↓
+Airflow-scheduled dbt run: Raw → Silver → Gold → Mart (must fit remaining budget)
     ↓
 Consumer query (instant)
     ↓
-Total: < 10min ✓
+Total: < 10min ✓ — dbt run interval is the controlling variable; it must be
+scheduled tightly enough (e.g. every 2–5 min) to leave headroom for Debezium/
+Kafka/JDBC-sink lag (typically seconds) within the 10-minute budget.
 ```
 
 ---
@@ -164,14 +197,14 @@ Total: < 10min ✓
 
 ## 6. Milestones → architecture mapping
 
-| Milestone | ODS | CDC | Raw | Metrics | Consumer | Test |
-|-----------|-----|-----|-----|---------|----------|------|
-| M1 | ✓ | — | — | — | — | ODS query |
-| M2 | ✓ | ✓ | ✓ | — | — | Raw table consistency |
-| M3 | ✓ | ✓ | ✓ | ✓ | — | Metric correctness |
-| M4 | ✓ | ✓ | ✓ | ✓ | ✓ analyst | No PII in results |
-| M5 | ✓ | ✓ | ✓ | ✓ | ✓ party | Row-level security |
-| M6 | ✓ | ✓ | ✓ | ✓ | ✓ | < 10 min lag |
+| Milestone | ODS | Debezium/Kafka | Raw | Silver/Gold | Mart | Consumer | Test |
+|-----------|-----|-----------------|-----|--------------|------|----------|------|
+| M1 | ✓ | — | — | — | — | — | ODS query |
+| M2 | ✓ | ✓ | ✓ | — | — | — | Raw table consistency |
+| M3 | ✓ | ✓ | ✓ | ✓ | ✓ | — | Metric correctness |
+| M4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ analyst | No PII in results |
+| M5 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ party | Row-level security |
+| M6 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | < 10 min lag |
 
 ---
 
@@ -179,16 +212,18 @@ Total: < 10min ✓
 
 To be resolved as decisions.
 
-- **Metric compute trigger:** Scheduled job (cron), streaming trigger, or on-demand? Trade-off: latency vs. cost.
-- **dbt or raw SQL?** Version control and testing ease vs. simplicity for a working example.
+- **dbt run interval:** Exact Airflow schedule for the Raw → Silver → Gold → Mart job (e.g. every 2 min vs. 5 min) — sets how much of the 10-minute NFR-1 budget is consumed by transform latency vs. left as headroom.
 - **Party auth mocking:** How do we mock Autoclose user login for the party consumer without real auth infrastructure?
 - **Seed data size:** How many files and steps for realistic throughput / latency testing?
-- **Materialized view refresh:** Full refresh or incremental? Cadence?
+- **Kafka Connect deployment:** Standalone or distributed mode for the working example? Distributed is more realistic but adds a Connect cluster to manage; standalone is simpler for a single-node demo.
+- **dbt materialization strategy:** Views, tables, or incremental models for Silver/Gold/Mart? Affects the freshness budget and dbt run duration.
 
 ---
 
 ## 8. Dependencies and unknowns
 
-- PostgreSQL version and replication slot configuration (version ≥ 10 for logical decoding)
-- dbt Cloud / local dbt CLI decision
+- PostgreSQL version and replication slot / publication configuration for Debezium (version ≥ 10 for logical decoding; `wal_level=logical`)
+- Debezium and Kafka Connect versions, and whether Kafka Connect runs standalone or distributed
+- dbt Core (local CLI) vs. dbt Cloud — assume dbt Core for a self-contained, one-command reproducible example (NFR-4)
+- Airflow deployment: LocalExecutor is sufficient for this working example's scale; needs its own metadata Postgres, separate from both the ODS and the warehouse
 - External visualization tool for analyst, or simple SQL query output?

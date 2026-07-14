@@ -10,5 +10,8 @@ Now we will build out an actual working solution with the milestones identified 
 
 # Milestones
 
-## Milestone 1 - Use Case
+## Build Phase — Testable Units
 
+### M1: Source ODS and seed data
+- **Test:** ODS schema (files, file_actions, audit_events) created and seeded with a complete refinance workflow (12 steps, from Application to Recording)
+- **Acceptance:** Can query ODS directly and retrieve all steps for a single file with correct timestamps and party assignments
