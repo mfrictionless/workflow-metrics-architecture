@@ -26,7 +26,7 @@ for d in $EXISTING; do
 done
 
 # 3. ODS source DDL is where the map says it lives.
-[ -f "$ROOT/ods/ddl/schema.sql" ] || err "ods/ddl/schema.sql not found"
+[ -f "$ROOT/ods/ddl/001_schema.sql" ] || err "ods/ddl/001_schema.sql not found"
 
 # 4. Every planned component folder is documented in the layout map.
 for name in $DOCUMENTED; do

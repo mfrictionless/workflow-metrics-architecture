@@ -6,6 +6,12 @@
 services:
   ods-postgres:
     image: postgres:16-alpine
+    # wal_level=logical enables CDC (M2.1) -- a postmaster-context setting,
+    # only applied at server start, so it's passed as a command-line
+    # override rather than set via SQL. max_wal_senders/max_replication_slots
+    # default to 10 in the base image, comfortably enough for this example's
+    # single slot.
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_DB: ${ODS_POSTGRES_DB}
       POSTGRES_USER: ${ODS_POSTGRES_USER}

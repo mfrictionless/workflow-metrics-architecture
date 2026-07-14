@@ -137,3 +137,22 @@ Append-only record of *why* each Change happened. Numbered D001, D002, D003, …
 - **Every simulated file is closed (all 4 steps complete).** Matches Requirements.md's only currently-active metric (U1, per-step turnaround on closed files); open/in-progress file generation is deferred rather than speculatively built now.
 - **Fresh `parties` per file, no shared "professional roster."** The current requirements don't call for a reusable roster concept; adding one now would be speculative.
 - **Found and fixed while building:** mixing a positional `%s` placeholder with named `%(name)s` placeholders in the same psycopg2 query, passing a dict parameter, raised `TypeError: dict is not a sequence` — psycopg2 requires one placeholder style consistently when a dict is bound. Fixed by using `%(file_id)s` throughout.
+
+## D007 — ODS logical replication for Debezium; renamed init files for ordering (2026-07-14)
+
+**Change:** `change/m2.1-logical-replication`
+
+**Motivation.** M2.1 needs the ODS configured for CDC — `wal_level=logical`, a publication, and a logical replication slot — ready for Debezium to consume in M2.3, without yet standing up Kafka/Debezium themselves.
+
+**Design delta:** `design/Milestones.md` M2.1 expanded to the full template; its 3 active references to `ods/ddl/schema.sql` updated to `001_schema.sql` (in `tests/check_structure.sh`, `tests/integration/test_schema_init.sh`, and Milestones' own M1.1 section). D004 (historical) left untouched, since it accurately described the file's name at the time it was written.
+
+**Artifacts:** `ods/ddl/001_schema.sql` (renamed from `schema.sql`), `ods/ddl/002_replication.sql` (new — publication + slot). `docker-compose.yml` — `command: ["postgres", "-c", "wal_level=logical"]` on `ods-postgres`. `tests/integration/test_replication.sh`.
+
+**Reversal:** if a second replication slot/publication is ever needed (e.g. a second consumer), add `003_...` rather than editing `002_replication.sql` in place, preserving the numbered-ordering convention.
+
+**Validation:** choices and rejected alternatives —
+- **Renamed `schema.sql` → `001_schema.sql`, added `002_replication.sql`**, exactly as D004's reversal note anticipated when M1.1 was built ("name files accordingly — `001_...`, `002_...`"). Rejected a subdirectory-based ordering trick — `docker-entrypoint-initdb.d` does not recurse into subdirectories, so numbered top-level files are the only mechanism Postgres's own init process actually supports.
+- **`wal_level=logical` via a compose `command:` override, not `ALTER SYSTEM` from SQL.** `wal_level` is a postmaster-context setting — changing it via `ALTER SYSTEM` only takes effect after a restart, whereas the command-line override applies from the very first server start, avoiding a two-step "start, configure, restart" dance for a fresh container.
+- **`pgoutput` plugin for the real slot (`dbz_slot`), matching Debezium's own default/recommended choice** — no separate Postgres extension needed (unlike `wal2json`), consistent with Technical-Design.md §2's CDC component choice.
+- **A separate, temporary `test_decoding`-plugin slot to verify "decodable WAL change," not the real `pgoutput` slot.** `pgoutput` emits a binary, protocol-specific format meant for a logical-replication-aware consumer (Debezium); asserting meaningful content from it via plain SQL isn't practical. `test_decoding` produces human-readable output assertable via `grep`, giving genuine proof that logical decoding works end-to-end — not just "some bytes came out" — while leaving `dbz_slot` unconsumed for M2.3.
+- **No explicit `max_wal_senders`/`max_replication_slots` override** — the base image's defaults (10 each) comfortably exceed this example's single-slot need; added config surface without a present need would be speculative.

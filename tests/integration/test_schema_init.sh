@@ -40,10 +40,12 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-# 1. The mount is wired: schema.sql is present where Postgres's auto-init
-# mechanism looks for it.
-docker compose exec -T ods-postgres test -f /docker-entrypoint-initdb.d/schema.sql \
-  || err "/docker-entrypoint-initdb.d/schema.sql not found in the container -- mount not wired"
+# 1. The mount is wired: 001_schema.sql is present where Postgres's auto-init
+# mechanism looks for it. Numbered so a second init file (002_replication.sql,
+# M2.1) is guaranteed to run after it -- alphabetical order, not directory
+# listing order, controls execution sequence.
+docker compose exec -T ods-postgres test -f /docker-entrypoint-initdb.d/001_schema.sql \
+  || err "/docker-entrypoint-initdb.d/001_schema.sql not found in the container -- mount not wired"
 
 # 2. All 4 tables exist.
 for t in files file_actions parties audit_events; do

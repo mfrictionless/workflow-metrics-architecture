@@ -39,7 +39,7 @@ milestone's own acceptance criteria.
   - Any implementation code inside the component folders.
 - **Layout:** The authoritative folder map and conventions live in [Technical-Design.md §9](Technical-Design.md#9-repository-layout) — a living map whose Status column flips from `planned` to `exists` as each folder is created. Only `ods/` exists today.
 - **Automated Test Plan:**
-  - *Fast — structure smoke check* (`tests/check_structure.sh`, no dependencies): asserts the §9 layout section exists, that folders marked existing are present on disk (`ods/` now; each later milestone appends its own), that `ods/ddl/schema.sql` exists where the map says the ODS source lives, and that every [§2](Technical-Design.md#2-component-choices) component folder is documented in the map. Exits non-zero on any missing folder or undocumented component.
+  - *Fast — structure smoke check* (`tests/check_structure.sh`, no dependencies): asserts the §9 layout section exists, that folders marked existing are present on disk (`ods/` now; each later milestone appends its own), that `ods/ddl/001_schema.sql` exists where the map says the ODS source lives, and that every [§2](Technical-Design.md#2-component-choices) component folder is documented in the map. Exits non-zero on any missing folder or undocumented component.
 - **Manual Test Plan:**
   - Read the layout map; for each [§2](Technical-Design.md#2-component-choices) component confirm there is exactly one folder with an unambiguous name.
   - Confirm no speculative/empty component folders exist yet (only `ods/`).
@@ -49,7 +49,7 @@ milestone's own acceptance criteria.
 - **Acceptance:** From a clean checkout, `make up` brings the ODS container up on the default settings and it accepts connections (`pg_isready` succeeds) within a bounded startup window; overriding an `.env`-sourced value (e.g. the database name) and re-running picks up the new value with no changes to `docker-compose.yml`; `make down` tears down cleanly with no orphaned volumes; if `ODS_POSTGRES_PORT` is already occupied by anything on the host — a Docker container or a native process — `make up` fails fast with a message naming the port and pointing at `.env`, rather than surfacing Docker's raw "port is already allocated" error.
 - **Dependencies:** M0.1 (folder layout — `ods/` already exists and holds the DDL M1.1 wires in).
 - **Out-of-scope:**
-  - Applying `ods/ddl/schema.sql` on startup — that's M1.1, since it's ODS-specific wiring rather than general compose setup.
+  - Applying `ods/ddl/001_schema.sql` on startup — that's M1.1, since it's ODS-specific wiring rather than general compose setup.
   - Any other service (simulator, Kafka, warehouse, Airflow, consumers) — added by their own milestones per §9's lazy-creation convention.
   - Real secrets management — `.env` holds local-dev-only defaults, called out via comment as not for production use.
 - **Automated Test Plan:**
@@ -84,17 +84,17 @@ milestone's own acceptance criteria.
 ### M1: Source ODS and seed data (COMPLETE)
 
 **M1.1 — ODS schema mounted, executed, and validated via compose**
-- **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
+- **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `001_schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
 - **Acceptance:** From a clean checkout, `make up` brings the ODS up with no manual `psql -f` step, and: all 4 tables exist (`information_schema.tables`); FK constraints from `file_actions`/`parties`/`audit_events` to `files` are present; CHECK constraints on the 4 enumerated columns exist and only accept ALL CAPS values (a lowercase insert, e.g. `role = 'borrower'`, is rejected); every column across all 4 tables has a non-empty `COMMENT`. Restarting the container without `make down` (volume persists) does not re-run or error on the init script, per Postgres's own init-once behavior.
 - **Dependencies:** M0.2 (compose file + `.env` + `make up`/`make down`).
 - **Out-of-scope:**
   - Seeding data — M1.2.
-  - Schema migrations/versioning beyond this single `schema.sql`.
-  - Any behavior when the data directory is *not* empty (e.g. changing `schema.sql` after a volume already exists) — Postgres's init-once semantics mean that's a `make down -v`-and-recreate case.
+  - Schema migrations/versioning beyond this single `001_schema.sql`.
+  - Any behavior when the data directory is *not* empty (e.g. changing `001_schema.sql` after a volume already exists) — Postgres's init-once semantics mean that's a `make down -v`-and-recreate case.
 - **Automated Test Plan:**
-  - *Integration:* `tests/integration/test_schema_init.sh` — brings the stack up via `scripts/compose_up.sh`, waits for readiness, then: (a) confirms `/docker-entrypoint-initdb.d/schema.sql` exists in the container (the mount is wired correctly); (b) queries `information_schema.tables` for all 4 tables; (c) queries `information_schema.table_constraints`/`pg_constraint` for the expected FKs; (d) attempts a lowercase enum insert on each of the 4 enumerated columns and asserts each is rejected (regression-testing the ALL CAPS fix made during the original schema build, now automated instead of manual); (e) queries `pg_description` and asserts every column of all 4 tables has a non-empty comment, not just a couple of spot-checked ones. Tears down after.
+  - *Integration:* `tests/integration/test_schema_init.sh` — brings the stack up via `scripts/compose_up.sh`, waits for readiness, then: (a) confirms `/docker-entrypoint-initdb.d/001_schema.sql` exists in the container (the mount is wired correctly); (b) queries `information_schema.tables` for all 4 tables; (c) queries `information_schema.table_constraints`/`pg_constraint` for the expected FKs; (d) attempts a lowercase enum insert on each of the 4 enumerated columns and asserts each is rejected (regression-testing the ALL CAPS fix made during the original schema build, now automated instead of manual); (e) queries `pg_description` and asserts every column of all 4 tables has a non-empty comment, not just a couple of spot-checked ones. Tears down after.
 - **Manual Test Plan:**
-  - `make up` from a clean checkout, `docker compose exec ods-postgres ls /docker-entrypoint-initdb.d/` — confirm `schema.sql` listed.
+  - `make up` from a clean checkout, `docker compose exec ods-postgres ls /docker-entrypoint-initdb.d/` — confirm `001_schema.sql` listed.
   - `psql`/`\d+ <table>` in, confirm all 4 tables, their constraints, and column comments are present.
   - Attempt inserting a lowercase enum value (e.g. `role = 'borrower'`) and confirm rejection.
   - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
@@ -135,8 +135,20 @@ milestone's own acceptance criteria.
 ### M2: CDC and raw landing
 
 **M2.1 — Postgres logical replication**
-- **Test:** ODS configured with `wal_level=logical`; a replication slot and publication exist for the source tables
-- **Acceptance:** `pg_replication_slots` shows an active slot; a manual `INSERT` produces a decodable WAL change
+- **Test:** The ODS Postgres service starts with `wal_level=logical` (a command-line override in `docker-compose.yml` — a postmaster-context setting, only applied at server start). On first init, `ods/ddl/002_replication.sql` creates a `PUBLICATION` (`dbz_publication`) covering all 4 source tables and a logical replication slot (`dbz_slot`) using the `pgoutput` plugin — the same plugin Debezium's Postgres connector will consume in M2.3.
+- **Acceptance:** From a clean checkout, `make up` results in: `SHOW wal_level;` = `logical`; `pg_publication_tables` lists all 4 tables under `dbz_publication`; `pg_replication_slots` shows `dbz_slot` (`plugin='pgoutput'`, `slot_type='logical'`); a manual `INSERT` produces a decodable WAL change (verified via a separate, temporary `test_decoding`-plugin slot created and dropped within the test, so the real `pgoutput` slot stays untouched for M2.3 to consume first). Restarting the container without `make down` doesn't re-run or error on the init script, and the slot/publication persist unduplicated (confirmed in manual testing).
+- **Dependencies:** M1.1 (schema exists — the publication needs the tables); M0.2 (compose + `make up`/`make down`).
+- **Out-of-scope:**
+  - Actually consuming the slot with Debezium — M2.3.
+  - Kafka / Kafka Connect — M2.2 / M2.3.
+  - Replication behavior under concurrent write load — out of scope for this working example.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_replication.sh` — brings the stack up, asserts `wal_level='logical'`, all 4 tables present in `pg_publication_tables` for `dbz_publication`, and `dbz_slot` exists with `plugin='pgoutput'`, `slot_type='logical'`. Then creates a temporary `test_decoding` slot, inserts a row, calls `pg_logical_slot_get_changes()` on that temporary slot, asserts the human-readable output contains `INSERT` and references the `files` table, and drops the temporary slot.
+- **Manual Test Plan:**
+  - `make up`, `psql` in, `SHOW wal_level;` → `logical`.
+  - `SELECT * FROM pg_publication_tables;` → all 4 tables under `dbz_publication`.
+  - `SELECT * FROM pg_replication_slots;` → `dbz_slot` present, `plugin='pgoutput'`, `active=f`.
+  - Restart the container (not `make down`), confirm no errors and the slot/publication persist unduplicated.
 
 **M2.2 — Kafka (KRaft)**
 - **Test:** Single-node Kafka broker running in KRaft mode; one topic per source table
