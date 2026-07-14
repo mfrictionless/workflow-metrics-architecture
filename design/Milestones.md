@@ -30,8 +30,19 @@ M1–M7 is wired into the compose file and the test command as part of that
 milestone's own acceptance criteria.
 
 **M0.1 — Repository structure**
-- **Test:** Top-level folders exist for each pipeline component (e.g. `ods/` for the source database DDL, with `simulator/`, `warehouse/` (dbt), `orchestration/` (Airflow), and `consumers/` added as those milestones are built), matching the component names used in [Technical-Design.md §2](Technical-Design.md#2-component-choices)
-- **Acceptance:** A new contributor can locate any component's source by folder name alone, with no cross-referencing needed
+- **Test:** The repository follows a documented monorepo layout — one top-level folder per pipeline component, named after its [Technical-Design.md §2](Technical-Design.md#2-component-choices) component, plus a layout map recorded in the [README](../README.md). Component folders are created by the milestone that first needs them (lazy, not speculative — see Out-of-scope); `ods/` already exists from M1.1.
+- **Acceptance:** A new contributor can locate any component's source by folder name alone, with no cross-referencing needed; the structure test (below) passes in the fast suite.
+- **Dependencies:** None — foundational. M0.2–M0.4 build on this layout.
+- **Out-of-scope:**
+  - Creating empty placeholder folders for components not yet built — each is added by its own milestone, to avoid speculative structure.
+  - The root `docker-compose.yml` (M0.2) and the single-command test runner (M0.4).
+  - Any implementation code inside the component folders.
+- **Layout:** The authoritative folder map and conventions live in [Technical-Design.md §9](Technical-Design.md#9-repository-layout) — a living map whose Status column flips from `planned` to `exists` as each folder is created. Only `ods/` exists today.
+- **Automated Test Plan:**
+  - *Fast — structure smoke check* (`tests/check_structure.sh`, no dependencies): asserts the §9 layout section exists, that folders marked existing are present on disk (`ods/` now; each later milestone appends its own), that `ods/ddl/schema.sql` exists where the map says the ODS source lives, and that every [§2](Technical-Design.md#2-component-choices) component folder is documented in the map. Exits non-zero on any missing folder or undocumented component.
+- **Manual Test Plan:**
+  - Read the layout map; for each [§2](Technical-Design.md#2-component-choices) component confirm there is exactly one folder with an unambiguous name.
+  - Confirm no speculative/empty component folders exist yet (only `ods/`).
 
 **M0.2 — docker-compose.yml at repo root**
 - **Test:** A single `docker-compose.yml` at the repository root defines every currently-implemented service

@@ -227,3 +227,31 @@ To be resolved as decisions.
 - dbt Core (local CLI) vs. dbt Cloud — assume dbt Core for a self-contained, one-command reproducible example (NFR-4)
 - Airflow deployment: LocalExecutor is sufficient for this working example's scale; needs its own metadata Postgres, separate from both the ODS and the warehouse
 - External visualization tool for analyst, or simple SQL query output?
+
+---
+
+## 9. Repository layout
+
+This project is a monorepo: one top-level folder per pipeline component, named after
+its [§2](#2-component-choices) component. This is a **living map** — folders are
+created lazily by the milestone that first needs them (nothing speculative), and the
+**Status** column flips from `planned` to `exists` as each is created.
+
+| Folder | Component ([§2](#2-component-choices)) | Created by | Status |
+|--------|-----------------------------------------|------------|--------|
+| `ods/` | PostgreSQL ODS (source DDL) | M1.1 | exists |
+| `simulator/` | Python simulator | M1.3 | planned |
+| `streaming/` | Kafka (KRaft) broker + Kafka Connect worker | M2.2 | planned |
+| `cdc/` | Debezium source connector + JDBC sink connector configs | M2.3 / M2.5 | planned |
+| `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | M2.4 / M3 | planned |
+| `orchestration/` | Airflow DAGs | M6 | planned |
+| `consumers/` | Analyst query surface + party REST API | M4 / M5 | planned |
+
+**Conventions:**
+- **Lazy creation** — a component folder appears only when its milestone is built; its
+  Status flips to `exists` at that point.
+- **Test co-location** — each component holds its own tests in its native form
+  (`ods/tests/` SQL assertions, `simulator/tests/` pytest, dbt tests inside
+  `warehouse/`). Cross-component and repo-meta tests — the M0.1 structure check,
+  end-to-end freshness — live at the repository root under `tests/`.
+- **Root** — holds `docker-compose.yml` (M0.2) and the single-command test runner (M0.4).

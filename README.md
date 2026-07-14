@@ -6,6 +6,8 @@ Design and implementation for a title/closing **workflow-metrics platform**: mod
 
 ## Repo map
 
+For the top-level component/folder layout of the monorepo, see [Technical-Design.md §9 — Repository layout](design/Technical-Design.md#9-repository-layout).
+
 ### Design documents (`design/`)
 | File | Purpose |
 |------|---------|
