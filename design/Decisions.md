@@ -97,3 +97,20 @@ Append-only record of *why* each Change happened. Numbered D001, D002, D003, …
 - **Read-only mount (`:ro`)** — the container only ever needs to read `schema.sql`; nothing it does should write back to the source tree.
 - **Enum-rejection assertions verify the specific CHECK constraint name in the error output, not just "the insert failed."** An earlier version of the test used "did the command fail" as the sole signal — but a failure for an *unrelated* reason (e.g. a bad `file_id`) would count as a false pass, hiding a real constraint regression. Found in this very milestone: a bug in the test's own setup (below) caused exactly that kind of unrelated failure, and the looser check would have masked it.
 - **`psql -t` (tuples-only) does not suppress the `INSERT 0 1` completion tag for `INSERT...RETURNING`.** A test helper did `file_id=$(psql -t -c "INSERT ... RETURNING file_id")`, and the captured value silently became `"1INSERT01"` (the row value concatenated with the command tag) after whitespace-stripping — corrupting every downstream query that used `$file_id` for unrelated reasons, not an enum-constraint failure. Fixed by wrapping the insert in `WITH ins AS (INSERT ... RETURNING file_id) SELECT file_id FROM ins;`, which psql treats as a pure `SELECT` and `-t` suppresses correctly. Caught by the stricter constraint-name check above, not by inspection — another instance of the D002/D003 pattern: an assertion needs to verify the *right* thing failed, not just *that* something failed.
+
+## D005 — Seed data as an explicit `make seed`, not auto-init (2026-07-14)
+
+**Change:** `change/m1.2-seed-data`
+
+**Motivation.** M1.2 needs one closed example file (Apply → Process → Sign → Record and close) for early testing and manual inspection. The owner's explicit call: keep it out of Postgres's auto-init mechanism, so later milestones' simulator-generated data (M1.3+) never gets silently mixed in with this fixed example on every `make up`.
+
+**Design delta:** `design/Milestones.md` M1.2 expanded to the full template. `design/Technical-Design.md` §9 — `ods/` description updated to note it now holds seed data too.
+
+**Artifacts:** `ods/seed/seed.sql` — the seed data, deliberately outside `ods/ddl/` so it is not picked up by `/docker-entrypoint-initdb.d/`. `scripts/seed.sh` — pipes `seed.sql` into `psql` against the running ODS via `docker compose exec`. `Makefile` `seed` target. `tests/integration/test_seed_data.sh` — asserts `make up` alone yields 0 files, then validates the full seeded row set after `make seed`.
+
+**Reversal:** if keeping seed data separate becomes more friction than it's worth (e.g. every test setup needs an extra `make seed` call), reconsider folding it into `ods/ddl/` as a numbered init file — but only once the simulator (M1.3) exists and the mixing concern can be evaluated against real behavior rather than speculatively.
+
+**Validation:** choices and rejected alternatives —
+- **Separate `ods/seed/` + explicit `make seed`, not `ods/ddl/` auto-init.** Rejected auto-loading via the same mount as `schema.sql` (my original draft) — the owner's reasoning: once the simulator (M1.3) is generating its own rows, a fixed seed file auto-inserted on every fresh volume would sit indistinguishably alongside generated data, making it harder to reason about which rows are the "known good" fixture versus simulated noise.
+- **No idempotency guard on repeated `make seed` calls.** It's a deliberate, user-invoked, additive action (confirmed empirically: running it twice produces 2 files) — not automatically run, so accidental double-seeding requires a deliberate second invocation. Revisit only if this becomes a real friction point.
+- **Single `\gset`-captured timestamp (`base_ts`), reused for both `files.closed_at` and the terminal step's `received_at`.** Learned from D004: relying on two separate `now()` calls to match would be fragile (each statement's implicit transaction can get a different timestamp). Capturing one value up front and reusing it makes the equality exact by construction, not by coincidence.

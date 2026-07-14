@@ -242,7 +242,7 @@ sequence is reordered.
 
 | Folder | Component ([§2](#2-component-choices)) | Status |
 |--------|-----------------------------------------|--------|
-| `ods/` | PostgreSQL ODS (source DDL) | exists |
+| `ods/` | PostgreSQL ODS (source DDL, seed data) | exists |
 | `simulator/` | Python simulator | planned |
 | `streaming/` | Kafka (KRaft) broker + Kafka Connect worker | planned |
 | `cdc/` | Debezium source connector + JDBC sink connector configs | planned |

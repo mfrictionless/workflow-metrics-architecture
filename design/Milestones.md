@@ -100,8 +100,20 @@ milestone's own acceptance criteria.
   - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
 
 **M1.2 — Seed data (truncated workflow)**
-- **Test:** Seed a truncated 4-step workflow — **Apply → Process → Sign → Record and close** (steps 1, 3, 9, 12 of the full 12-step model in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md)) — for at least one closed file.
-- **Acceptance:** Query the ODS directly and retrieve all 4 steps for the file with correct timestamps, RACI-consistent sender/receiver, and party assignments
+- **Test:** `make seed` — a separate, explicit command — applies `ods/seed/seed.sql` against the running ODS (piped into `psql` via `docker compose exec`), inserting one closed file's truncated 4-step workflow (Apply → Process → Sign → Record and close), with `parties` rows for every role involved and RACI-correct sender/receiver per steps 1, 3, 9, 12 in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md). Kept out of `ods/ddl/` (not mounted into `docker-entrypoint-initdb.d`) so `make up` alone brings up an **empty** ODS — seed data is never automatically mixed into whatever the simulator (M1.3+) generates.
+- **Acceptance:** From a clean checkout, `make up` brings up an ODS with 0 files. Running `make seed` afterward results in exactly 1 file (`status='CLOSED'`) with its 4 `file_actions` rows, each `sent_at < received_at`, sender/receiver party roles matching the workflow reference; `files.closed_at` equals the `RECORDING` step's `received_at`, and that step's `received_user_id` is `NULL` (A5).
+- **Dependencies:** M1.1 (schema + `make up` bringing up a clean, empty ODS).
+- **Out-of-scope:**
+  - The full 12-step workflow — M7.
+  - Ongoing/continuous data generation — M1.3.
+  - Seeding more than one file per invocation.
+  - **Idempotency of repeated `make seed` calls** — it's an explicit, additive command; running it twice inserts a second file (confirmed in manual testing). Not guarded against now; revisit if that becomes a real workflow problem.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_seed_data.sh` — brings the stack up via `scripts/compose_up.sh`, asserts **0 files** present (proving `make up` alone stays empty); runs `scripts/seed.sh`; then verifies exactly 1 file, 4 `file_actions` rows with expected `action_code`s in order, every row's `sent_at < received_at`, correct sender/receiver roles per step, `RECORDING.received_user_id IS NULL`, and `files.closed_at` matching `RECORDING.received_at` exactly (the seed script captures one `now()` value via `\gset` and reuses it for both, avoiding two separate `now()` calls drifting apart). Tears down after.
+- **Manual Test Plan:**
+  - `make up`, confirm `SELECT count(*) FROM files;` returns 0.
+  - `make seed`, confirm the 1 seeded file and its 4 steps as described.
+  - Run `make seed` again and observe a second file inserted — confirms it's additive/explicit, matching the documented out-of-scope behavior.
 
 **M1.3 — Python simulator (truncated workflow)**
 - **Test:** Simulator generates new `files` and `file_actions` rows on a repeatable cadence, following the same 4-step model and RACI rules as seed data
