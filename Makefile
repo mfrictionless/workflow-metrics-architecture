@@ -1,4 +1,12 @@
-.PHONY: up down seed test test-fast test-integration
+# .env's KEY=VALUE lines double as Make variables (e.g. SIMULATOR_FILE_COUNT),
+# so its defaults are available here without duplicating them.
+include .env
+
+# A command-line override (make simulate COUNT=1000) always wins over this
+# default -- Make applies COUNT ?= only when COUNT wasn't already set.
+COUNT ?= $(SIMULATOR_FILE_COUNT)
+
+.PHONY: up down seed simulate test test-fast test-integration
 
 # Bring the compose stack up. Fails with an actionable message (pointing at
 # .env) on a port conflict, rather than Docker's raw daemon error.
@@ -13,6 +21,11 @@ down:
 # schema init, so seed data never mixes with simulator-generated data.
 seed:
 	@./scripts/seed.sh
+
+# Create COUNT new files (default from .env's SIMULATOR_FILE_COUNT).
+# Override per-run: make simulate COUNT=1000
+simulate:
+	@COUNT=$(COUNT) ./scripts/simulate.sh
 
 # Run every test in the repo: fast tier, then integration tier. Fail-fast --
 # stops at the first failing script.

@@ -116,8 +116,21 @@ milestone's own acceptance criteria.
   - Run `make seed` again and observe a second file inserted — confirms it's additive/explicit, matching the documented out-of-scope behavior.
 
 **M1.3 — Python simulator (truncated workflow)**
-- **Test:** Simulator generates new `files` and `file_actions` rows on a repeatable cadence, following the same 4-step model and RACI rules as seed data
-- **Acceptance:** Running the simulator for N minutes produces N files' worth of well-formed rows (no orphaned `file_actions`, custody chain intact per A2 in [Requirements.md](Requirements.md))
+- **Test:** `make simulate` (default count from `.env`'s `SIMULATOR_FILE_COUNT=5`; override per-run with `make simulate COUNT=1000`) runs the simulator in a one-off container (`docker compose run`) on the compose network, inserting `COUNT` new, independent, fully-closed files — same truncated 4-step workflow and RACI-correct sender/receiver as M1.2's seed data, fresh `parties` per file. Row-generation logic (`simulator/workflow.py`) is pure and dependency-free, separated from the DB-writing wrapper (`simulator/simulate.py`, the only module importing `psycopg2`) so it can be unit-tested without a database.
+- **Acceptance:** `make simulate COUNT=n` produces exactly `n` new closed files, each with its own 4 `file_actions` and 6 `parties` rows, correct roles per step, no orphaned rows, no cross-file mixups, and `RECORDING.received_user_id IS NULL` (A5). Additive across runs, like `make seed`. `make simulate` alone (no `COUNT=`) uses the `.env` default.
+- **Dependencies:** M0.2 (compose + `.env` + `make up`/`make down`); M1.1 (schema + writable ODS).
+- **Out-of-scope:**
+  - Internal scheduling/looping — one invocation makes `COUNT` files and exits; repeated/scheduled invocation is M6.1's job (Airflow).
+  - Open/in-progress files — every simulated file is closed, matching the only currently-active metric (U1, per-step turnaround on closed files).
+  - The full 12-step workflow — M7.
+  - A shared "professional roster" of parties across files — each file gets its own fresh 6 parties.
+- **Automated Test Plan:**
+  - *Fast:* `tests/check_simulator_logic.sh` — runs `simulator/tests/test_workflow.py` via stdlib `unittest` (no pip install, no Docker): action sequence and order, `sent_at < received_at`, sender/receiver roles per step match Home-Refinance-Workflow.md, `closed_at` matches the terminal step's `received_at`, terminal step has no receiver, 6 parties, and no `user_id`/`file_number` collisions across two calls to `build_file`.
+  - *Integration:* `tests/integration/test_simulator.sh` — brings the stack up, confirms 0 files before simulating, runs `COUNT=3 ./scripts/simulate.sh`, asserts 3 closed files each with exactly 4 `file_actions` / 6 `parties`, no orphans, correct roles per step (joined within the correct file, proving no cross-file mixups), `RECORDING.received_user_id IS NULL`; runs once more with `COUNT=1` and confirms the count is additive (4 total).
+- **Manual Test Plan:**
+  - `make up`, then `make simulate` — confirm 5 new closed files (the `.env` default).
+  - `make simulate COUNT=2` — confirm 2 more files, 7 total.
+  - Inspect one file's rows directly; confirm roles and timestamps are sane.
 
 ### M2: CDC and raw landing
 

@@ -16,5 +16,21 @@ services:
       - ods_data:/var/lib/postgresql/data
       - ./ods/ddl:/docker-entrypoint-initdb.d:ro
 
+  # On-demand job, not a long-running service -- `profiles` keeps it out of a
+  # bare `docker compose up`; run explicitly via `docker compose run simulator`
+  # (make simulate), which targets a named service regardless of profile.
+  simulator:
+    build: ./simulator
+    profiles: ["tools"]
+    depends_on:
+      - ods-postgres
+    environment:
+      ODS_POSTGRES_HOST: ods-postgres
+      ODS_POSTGRES_PORT: 5432
+      ODS_POSTGRES_DB: ${ODS_POSTGRES_DB}
+      ODS_POSTGRES_USER: ${ODS_POSTGRES_USER}
+      ODS_POSTGRES_PASSWORD: ${ODS_POSTGRES_PASSWORD}
+      COUNT: ${COUNT:-${SIMULATOR_FILE_COUNT}}
+
 volumes:
   ods_data:

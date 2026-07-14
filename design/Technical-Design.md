@@ -243,7 +243,7 @@ sequence is reordered.
 | Folder | Component ([§2](#2-component-choices)) | Status |
 |--------|-----------------------------------------|--------|
 | `ods/` | PostgreSQL ODS (source DDL, seed data) | exists |
-| `simulator/` | Python simulator | planned |
+| `simulator/` | Python simulator | exists |
 | `streaming/` | Kafka (KRaft) broker + Kafka Connect worker | planned |
 | `cdc/` | Debezium source connector + JDBC sink connector configs | planned |
 | `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | planned |
@@ -254,7 +254,8 @@ sequence is reordered.
 - **Lazy creation** — a component folder appears only when its milestone is built; its
   Status flips to `exists` at that point.
 - **Test co-location** — each component holds its own tests in its native form
-  (`ods/tests/` SQL assertions, `simulator/tests/` pytest, dbt tests inside
-  `warehouse/`). Cross-component and repo-meta tests (the repository structure
-  check, end-to-end freshness) live at the repository root under `tests/`.
+  (`ods/tests/` SQL assertions, `simulator/tests/` stdlib `unittest` — no pytest
+  dependency needed for pure-logic unit tests, dbt tests inside `warehouse/`).
+  Cross-component and repo-meta tests (the repository structure check, end-to-end
+  freshness) live at the repository root under `tests/`.
 - **Root** — holds `docker-compose.yml` and the single-command test runner.
