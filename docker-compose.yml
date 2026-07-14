@@ -1,0 +1,19 @@
+# Monorepo compose file. One service per pipeline component, added as each
+# is built — see design/Technical-Design.md §9 (Repository layout).
+# Settings are sourced from .env at the repo root; edit that file to adjust
+# ports/credentials for your environment.
+
+services:
+  ods-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${ODS_POSTGRES_DB}
+      POSTGRES_USER: ${ODS_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ODS_POSTGRES_PASSWORD}
+    ports:
+      - "${ODS_POSTGRES_PORT}:5432"
+    volumes:
+      - ods_data:/var/lib/postgresql/data
+
+volumes:
+  ods_data:

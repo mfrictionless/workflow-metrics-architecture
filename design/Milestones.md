@@ -45,8 +45,23 @@ milestone's own acceptance criteria.
   - Confirm no speculative/empty component folders exist yet (only `ods/`).
 
 **M0.2 — docker-compose.yml at repo root**
-- **Test:** A single `docker-compose.yml` at the repository root defines every currently-implemented service
-- **Acceptance:** `docker compose up` from a clean checkout brings up every implemented service with no manual steps
+- **Test:** A `docker-compose.yml` and a companion `.env` at the repository root define the ODS PostgreSQL service. `.env` holds the adjustable settings (host port, db name, user, password) with committed defaults — no manual setup required for a clean checkout, but a user can edit `.env` to fit their own environment (e.g., already running Postgres on 5432). `make up` / `make down` are the documented entrypoints, not bare `docker compose` commands, because a port conflict must fail with a message pointing at `.env` rather than Docker's raw daemon error.
+- **Acceptance:** From a clean checkout, `make up` brings the ODS container up on the default settings and it accepts connections (`pg_isready` succeeds) within a bounded startup window; overriding an `.env`-sourced value (e.g. the database name) and re-running picks up the new value with no changes to `docker-compose.yml`; `make down` tears down cleanly with no orphaned volumes; if `ODS_POSTGRES_PORT` is already occupied by anything on the host — a Docker container or a native process — `make up` fails fast with a message naming the port and pointing at `.env`, rather than surfacing Docker's raw "port is already allocated" error.
+- **Dependencies:** M0.1 (folder layout — `ods/` already exists and holds the DDL M0.3 wires in).
+- **Out-of-scope:**
+  - Applying `ods/ddl/schema.sql` on startup — M0.3.
+  - Any other service (simulator, Kafka, warehouse, Airflow, consumers) — added by their own milestones per §9's lazy-creation convention.
+  - Real secrets management — `.env` holds local-dev-only defaults, called out via comment as not for production use.
+- **Automated Test Plan:**
+  - *Fast:* `docker compose config` — validates the compose file + `.env` interpolation parses and renders without starting containers.
+  - *Integration:* `tests/integration/test_compose_up.sh` — brings the stack up via `scripts/compose_up.sh` on default `.env` settings, waits for readiness, then overrides `ODS_POSTGRES_DB` and confirms the overridden database actually exists (proving `.env` is wired in, not vestigial).
+  - *Integration:* `tests/integration/test_port_conflict.sh` — regression test for a bug found in manual testing: occupies a port with an independently-running container, then asserts `scripts/compose_up.sh` fails (not a false-positive success) with a message naming `ODS_POSTGRES_PORT`.
+- **Manual Test Plan:**
+  - `make up`, confirm no errors in logs.
+  - `psql` in and confirm connection succeeds (no tables yet — that's M0.3).
+  - Edit `.env`, change `ODS_POSTGRES_PORT`, re-run, confirm the new port is what's listening.
+  - `make down`, confirm volume removal (`docker volume ls`).
+  - With the configured port already occupied by something else, confirm `make up` fails with a message pointing at `.env` — not Docker's raw daemon error.
 
 **M0.3 — M1.1 wired into compose**
 - **Test:** The ODS Postgres service in `docker-compose.yml` automatically applies [ods/ddl/schema.sql](../ods/ddl/schema.sql) on first startup
