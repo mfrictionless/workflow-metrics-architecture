@@ -19,7 +19,7 @@ M7 expands the truncated workflow once the pipeline is verified end-to-end.
 Sub-milestones are the granular, independently testable units within a phase —
 build and verify them in order; a phase is done when all its sub-milestones pass.
 
-### M0: Repository structure and single-command pipeline
+### M0: Repository structure and single-command pipeline (COMPLETE)
 
 A monorepo: one `docker-compose.yml` at the repository root composes every
 service as it comes online, and one command runs every test suite. This
