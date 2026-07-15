@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_files
+    description: One current row per file_id, deduplicated from raw_files by _cdc_ts.
+    columns:
+      - name: file_id
+        tests:
+          - unique
+          - not_null

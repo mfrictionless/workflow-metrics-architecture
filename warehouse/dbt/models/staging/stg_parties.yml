@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_parties
+    description: One current row per party_id, deduplicated from raw_parties by _cdc_ts.
+    columns:
+      - name: party_id
+        tests:
+          - unique
+          - not_null

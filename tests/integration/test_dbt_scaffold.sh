@@ -26,10 +26,14 @@ if ! printf '%s' "$debug_output" | grep -q "All checks passed!"; then
   printf '%s\n' "$debug_output" >&2
 fi
 
-# 2. dbt run with zero models completes cleanly, not an error.
+# 2. dbt run completes cleanly, not an error. Originally asserted "Nothing
+# to do" when the project had 0 models (M3.1); staging models exist as of
+# M3.2, so this now checks for a clean "Completed successfully" instead --
+# still proving the run doesn't error, without pinning to a model count that
+# is expected to keep growing (M3.3+).
 run_output=$(docker compose run --rm dbt --no-use-colors run 2>&1) || true
-if ! printf '%s' "$run_output" | grep -q "Nothing to do"; then
-  err "dbt run (0 models) did not report 'Nothing to do'"
+if ! printf '%s' "$run_output" | grep -q "Completed successfully"; then
+  err "dbt run did not complete successfully"
   printf '%s\n' "$run_output" >&2
 fi
 

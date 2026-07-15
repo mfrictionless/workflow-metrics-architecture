@@ -14,3 +14,16 @@ target-path: "target"
 clean-targets:
   - "target"
   - "dbt_packages"
+
+# Per-layer materialization, resolved in D015: staging/intermediate as views
+# (freshness over storage; volumes are trivial in this demo), marts as
+# tables (served layer, queried repeatedly). Folders below models/ don't
+# exist until the milestone that first needs them (staging: M3.2).
+models:
+  workflow_metrics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
