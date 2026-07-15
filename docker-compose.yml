@@ -49,8 +49,8 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
-  # Second, separate Postgres instance for the warehouse (Raw -> Silver ->
-  # Gold -> Mart, M2.5+). Entirely distinct from ods-postgres -- own
+  # Second, separate Postgres instance for the warehouse (Raw -> staging ->
+  # intermediate -> marts, M2.5+). Entirely distinct from ods-postgres -- own
   # container, own volume, own port -- so CDC never adds load to the write
   # primary (FR-2). No schema applied yet; the JDBC sink connector (M2.5)
   # lands Raw tables here. See design/Milestones.md M2.4.
@@ -93,7 +93,7 @@ services:
     ports:
       - "${CONNECT_REST_PORT}:8083"
 
-  # dbt Core project (Raw -> Silver -> Gold -> Mart, M3+), run on demand via
+  # dbt Core project (Raw -> staging -> intermediate -> marts, M3+), run on demand via
   # `docker compose run`, not a long-running service. Official dbt Labs image
   # (Postgres adapter pre-installed) has no arm64 build -- platform pinned to
   # linux/amd64 (Rosetta emulation on Apple Silicon), confirmed by inspecting

@@ -8,7 +8,7 @@
 
 ## 1. Architecture overview
 
-End-to-end flow: **simulator → ODS → CDC (Debezium/Kafka) → raw landing → dbt transforms (Silver → Gold → Mart) → governed read-only consumers**.
+End-to-end flow: **simulator → ODS → CDC (Debezium/Kafka) → raw landing → dbt transforms (staging → intermediate → marts) → governed read-only consumers**.
 
 ```
 ┌───────────────────┐
@@ -41,7 +41,7 @@ End-to-end flow: **simulator → ODS → CDC (Debezium/Kafka) → raw landing �
 │         Warehouse PostgreSQL (separate       │
 │              instance from ODS)              │
 │                                               │
-│   Raw  ──dbt──▶  Silver  ──dbt──▶  Gold  ──▶  Metric Mart │
+│  Raw  ──dbt──▶  staging  ──dbt──▶  intermediate  ──▶  marts │
 └──────────────────────┬────────────────────────┘
                         │
                   (orchestrated by Airflow:
@@ -73,11 +73,11 @@ phases, each with its own state at the ODS, Kafka Connect, and Kafka layers:
 | Streaming backbone | Kafka, KRaft mode (no Zookeeper) | Fewer moving parts to stand up than Zookeeper-based Kafka; one topic per source table |
 | Serialization | Plain JSON, no schema registry | Simplest to run for a working example; schema evolution is manual (acceptable trade-off given NFR-4) |
 | Raw landing | Kafka Connect JDBC sink connector → warehouse PostgreSQL | Writes Kafka topic records into raw tables; separate instance from the ODS so CDC never adds load to the write primary (FR-2) |
-| Transform (Silver/Gold/Mart) | dbt, single project against the warehouse PostgreSQL | Declarative, version-controlled, testable; layers raw → conformed (Silver) → business/dimensional (Gold) → governed Metric Mart |
+| Transform (staging/intermediate/marts) | dbt, single project against the warehouse PostgreSQL | Declarative, version-controlled, testable; layers raw sources → conformed (staging) → business/dimensional (intermediate) → governed marts (served) |
 | Orchestration | Airflow | Schedules the Python simulator's write cadence and the dbt run interval; Debezium and Kafka Connect run as always-on services outside Airflow's control |
-| Governance | Row-level security (RLS) via PostgreSQL policies on the Metric Mart | Native to PostgreSQL; scopes each party to their file(s) at the served layer |
-| Analyst consumer | SQL query interface (DBeaver / psql) against the Metric Mart | Simple read-only access; no PII visible by view definition |
-| Party consumer | REST API + RLS (mocked auth) against the Metric Mart | Read-only; returns only the party's own file(s) |
+| Governance | Row-level security (RLS) via PostgreSQL policies on the marts layer | Native to PostgreSQL; scopes each party to their file(s) at the served layer |
+| Analyst consumer | SQL query interface (DBeaver / psql) against the marts layer | Simple read-only access; no PII visible by view definition |
+| Party consumer | REST API + RLS (mocked auth) against the marts layer | Read-only; returns only the party's own file(s) |
 
 **Assumption — no hard deletes.** `files` and `file_actions` are append-only / status-driven (a file's `status` changes, rows are not deleted). This sidesteps JDBC sink tombstone-record handling, which otherwise requires the Debezium connector to emit tombstones on delete and the sink to be configured with `delete.enabled` and a primary key. Revisit if the ODS model ever hard-deletes a row.
 
@@ -127,23 +127,34 @@ audit_events (
 )
 ```
 
-### Raw layer schema (JDBC-sink landed, read-only)
+### Warehouse layers (dbt-native; medallion cross-reference)
 
-Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp).
+The warehouse follows dbt's native layering as the project standard. Medallion (Bronze/Silver/Gold) terms are retained only as a cross-reference — the mapping is deliberately many-to-one, not 1:1 (see [D015](Decisions.md#d015)):
 
-### Silver layer (dbt, conformed)
+| dbt layer | Location / prefix | Materialization | Medallion |
+|-----------|-------------------|-----------------|-----------|
+| sources | `raw` (JDBC-sink-landed tables) | — (landed) | Bronze |
+| staging | `models/staging/stg_*` | view | Silver |
+| intermediate | `models/intermediate/int_*` | view | Silver |
+| marts | `models/marts/fct_*`, `dim_*` | table | Gold |
 
-Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`.
+### Raw layer schema — dbt `sources` (JDBC-sink landed, read-only)
 
-### Gold layer (dbt, business/dimensional)
+Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Declared to dbt as the `raw` source (not a model). Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp).
 
-Joins `file_actions` to `files` and `parties`; derives step-level facts (open/closed, step number from `action_code`, party role). One row per step per file.
+### Staging layer (dbt, `stg_` — conformed)
 
-### Metric Mart (dbt, governed — final served layer)
+Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`. Materialized as views.
+
+### Intermediate layer (dbt, `int_` — business/dimensional)
+
+Joins `file_actions` to `files` and `parties`; derives step-level facts (open/closed, step number from `action_code`, party role). One row per step per file. Materialized as views.
+
+### Marts layer (dbt, `fct_`/`dim_` — governed, final served layer)
 
 ```sql
 -- M3: Turnaround metric
-step_turnaround_daily (
+fct_step_turnaround (
   file_id           bigint,
   action_code       varchar,
   step_number       int,
@@ -154,7 +165,7 @@ step_turnaround_daily (
 )
 
 -- Aggregates (analyst view, no PII)
-step_turnaround_summary (
+agg_step_turnaround (
   action_code       varchar,
   step_number       int,
   mean_turnaround_sec int,
@@ -163,7 +174,7 @@ step_turnaround_summary (
 )
 ```
 
-RLS policies are applied at this layer only — Raw, Silver, and Gold are internal to the pipeline and never queried directly by either consumer.
+RLS policies are applied at the marts layer only — the `raw` sources, staging, and intermediate layers are internal to the pipeline and never queried directly by either consumer.
 
 ---
 
@@ -180,7 +191,7 @@ Kafka publish (< 1s)
     ↓
 JDBC sink → Raw land (seconds, connector poll interval)
     ↓
-Airflow-scheduled dbt run: Raw → Silver → Gold → Mart (must fit remaining budget)
+Airflow-scheduled dbt run: Raw → staging → intermediate → marts (must fit remaining budget)
     ↓
 Consumer query (instant)
     ↓
@@ -203,7 +214,7 @@ Kafka/JDBC-sink lag (typically seconds) within the 10-minute budget.
 
 ## 6. Milestones → architecture mapping
 
-| Milestone | ODS | Debezium/Kafka | Raw | Silver/Gold | Mart | Consumer | Test |
+| Milestone | ODS | Debezium/Kafka | Raw | staging/intermediate | marts | Consumer | Test |
 |-----------|-----|-----------------|-----|--------------|------|----------|------|
 | M1 | ✓ | — | — | — | — | — | ODS query |
 | M2 | ✓ | ✓ | ✓ | — | — | — | Raw table consistency |
@@ -218,11 +229,11 @@ Kafka/JDBC-sink lag (typically seconds) within the 10-minute budget.
 
 To be resolved as decisions.
 
-- **dbt run interval:** Exact Airflow schedule for the Raw → Silver → Gold → Mart job (e.g. every 2 min vs. 5 min) — sets how much of the 10-minute NFR-1 budget is consumed by transform latency vs. left as headroom.
+- **dbt run interval:** Exact Airflow schedule for the Raw → staging → intermediate → marts job (e.g. every 2 min vs. 5 min) — sets how much of the 10-minute NFR-1 budget is consumed by transform latency vs. left as headroom.
 - **Party auth mocking:** How do we mock Autoclose user login for the party consumer without real auth infrastructure?
 - **Seed data size:** How many files and steps for realistic throughput / latency testing?
 - **Kafka Connect deployment:** Standalone or distributed mode for the working example? Distributed is more realistic but adds a Connect cluster to manage; standalone is simpler for a single-node demo.
-- **dbt materialization strategy:** Views, tables, or incremental models for Silver/Gold/Mart? Affects the freshness budget and dbt run duration.
+- **dbt materialization strategy:** ~~Views, tables, or incremental models for each layer?~~ *Resolved ([D015](Decisions.md#d015)):* staging and intermediate as views, marts as tables; incremental deferred until data volume warrants it. Revisit only if `dbt run` duration threatens the freshness budget.
 
 ---
 
@@ -251,7 +262,7 @@ sequence is reordered.
 | `ods/` | PostgreSQL ODS (source DDL, seed data) | exists |
 | `simulator/` | Python simulator | exists |
 | `cdc/` | Debezium source connector + JDBC sink connector configs | exists |
-| `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | exists |
+| `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → staging → intermediate → marts) | exists |
 | `orchestration/` | Airflow DAGs | planned |
 | `consumers/` | Analyst query surface + party REST API | planned |
 

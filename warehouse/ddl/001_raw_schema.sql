@@ -10,8 +10,8 @@
 --
 -- Deliberately no constraints (no FKs, no NOT NULL, no CHECK): Raw is a
 -- faithful, append-only landing of whatever the source produced, per-topic,
--- independently ordered. Silver (M3.2) is where correctness constraints and
--- deduplication belong.
+-- independently ordered. The staging layer (M3.2) is where correctness
+-- constraints and deduplication belong.
 
 CREATE TABLE raw_files (
     file_id       bigint,

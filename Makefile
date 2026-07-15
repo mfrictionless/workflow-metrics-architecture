@@ -35,7 +35,7 @@ simulate:
 register-connector:
 	@./scripts/register_connector.sh
 
-# dbt Core against the warehouse (Raw -> Silver -> Gold -> Mart, M3+). Both
+# dbt Core against the warehouse (Raw -> staging -> intermediate -> marts, M3+). Both
 # are one-off actions against an already-running warehouse-postgres, same
 # reasoning as `make seed` -- not part of bringing the stack up.
 dbt-debug:

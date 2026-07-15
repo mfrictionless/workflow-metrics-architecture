@@ -191,7 +191,7 @@ milestone's own acceptance criteria.
 - **Acceptance:** From a clean checkout, `make up` brings up both `ods-postgres` and `warehouse-postgres` as distinct running containers with distinct container IDs and distinct volumes; `warehouse-postgres` accepts connections (`pg_isready`) on its own port within the same bounded startup window as `ods-postgres`; a row written to the ODS is not visible anywhere in the warehouse instance (proving these are genuinely two databases, not one instance with two schemas) — the concrete, verifiable form of FR-2 ("CDC adds no load to the write primary"), since the write primary and the warehouse now physically cannot share load by construction.
 - **Dependencies:** M0.2 (compose + `.env` + `make up`/`make down` pattern this service follows).
 - **Out-of-scope:**
-  - Any Raw/Silver/Gold/Mart schema in the warehouse — M2.5 (JDBC sink lands Raw) and M3 (dbt builds Silver/Gold/Mart) apply schema, respectively.
+  - Any staging/intermediate/marts model schema in the warehouse — M2.5 (JDBC sink lands Raw) and M3 (dbt builds staging/intermediate/marts) apply schema, respectively.
   - The `warehouse/` folder (Technical-Design.md §9) — left `planned`; this milestone's entire config is expressible via `docker-compose.yml`/`.env`, same reasoning as M2.2's `streaming/`. `warehouse/` is more likely first needed by M3's dbt project.
   - Cross-instance replication, backup, or HA — a single warehouse instance, matching the ODS's own scope.
 - **Automated Test Plan:**
@@ -204,13 +204,13 @@ milestone's own acceptance criteria.
 
 **M2.5 — JDBC sink connector**
 - **Test:** A Debezium JDBC sink connector (`io.debezium.connector.jdbc.JdbcSinkConnector`) registered against the same `kafka-connect` worker from M2.3 — no new image or plugin install, since the `quay.io/debezium/connect` image already bundles this plugin. Chosen over Confluent's `kafka-connect-jdbc` to sidestep that connector's Community License question entirely (Debezium's JDBC sink is Apache 2.0). Consumes all 4 `ods.public.*` topics (M2.3) via a topic regex and lands each as its own append-only Raw table (`raw_files`, `raw_file_actions`, `raw_parties`, `raw_audit_events`) in `warehouse-postgres` (M2.4). Raw tables are **hand-written DDL** (`warehouse/ddl/001_raw_schema.sql`, mounted the same way as `ods/ddl/`), not the connector's own schema evolution — reversing the draft's original plan once testing showed schema evolution can't produce `_sink_ts` (a Postgres-side `DEFAULT now()`, not a value carried on the Kafka message) without a racy after-the-fact `ALTER TABLE`. `_cdc_op`/`_cdc_ts` are stamped onto each message by an SMT chain (`ExtractNewRecordState` + a field rename) before the sink writes it; `_cdc_ts` is Debezium's event timestamp, not the ODS row's own timestamp columns.
-- **Acceptance:** From a clean checkout, `make up` + `make register-connector` (generalized to loop over every `cdc/*.json` config, registering both the source and sink connectors) results in the sink connector reaching `RUNNING` with its task also `RUNNING`; after `make seed`, each Raw table's row count matches the corresponding ODS table's row count; every landed row carries non-null `_cdc_op` (`c` for an insert-only source), `_cdc_ts`, and `_sink_ts`. Landing is append-only: a redelivered or duplicate Kafka message produces another Raw row rather than an upsert — deduplication is explicitly Silver's job (M3.2), not Raw's. `make register-connector` run twice is idempotent for both connectors.
+- **Acceptance:** From a clean checkout, `make up` + `make register-connector` (generalized to loop over every `cdc/*.json` config, registering both the source and sink connectors) results in the sink connector reaching `RUNNING` with its task also `RUNNING`; after `make seed`, each Raw table's row count matches the corresponding ODS table's row count; every landed row carries non-null `_cdc_op` (`c` for an insert-only source), `_cdc_ts`, and `_sink_ts`. Landing is append-only: a redelivered or duplicate Kafka message produces another Raw row rather than an upsert — deduplication is explicitly the staging layer's job (M3.2), not Raw's. `make register-connector` run twice is idempotent for both connectors.
 - **Dependencies:** M2.3 (source connector + `ods.public.*` topics must exist); M2.4 (`warehouse-postgres` as the landing target).
 - **Out-of-scope:**
-  - Deduplication of redelivered records, or resolving out-of-order arrival — Silver's job (M3.2). Raw is a faithful, append-only landing of every message received.
+  - Deduplication of redelivered records, or resolving out-of-order arrival — the staging layer's job (M3.2). Raw is a faithful, append-only landing of every message received.
   - `UPDATE`/`DELETE` handling beyond what the source connector produces — same insert-only assumption as M2.3 (Technical-Design.md §2).
   - Schema Registry / Avro — already decided against.
-  - Foreign keys, `NOT NULL`, or `CHECK` constraints on Raw tables — deliberately unconstrained; Raw faithfully lands whatever arrived, per-topic, independently ordered. Correctness constraints belong to Silver.
+  - Foreign keys, `NOT NULL`, or `CHECK` constraints on Raw tables — deliberately unconstrained; Raw faithfully lands whatever arrived, per-topic, independently ordered. Correctness constraints belong to the staging layer.
 - **Automated Test Plan:**
   - *Integration:* `tests/integration/test_jdbc_sink.sh` — brings the stack up, registers both connectors, waits for the sink connector/task to reach `RUNNING`, runs `make seed`, polls for the row to land (the pipeline is asynchronous), then asserts each of the 3 seeded Raw tables' row count matches its ODS counterpart, `_cdc_op`/`_cdc_ts`/`_sink_ts` are non-null on every `raw_files` row, and `_cdc_op='c'`.
 - **Manual Test Plan:**
@@ -242,45 +242,46 @@ milestone's own acceptance criteria.
 - **Acceptance:** From a clean checkout, `make up` followed by `make dbt-debug` runs `dbt debug` inside the container and reports all checks passing (profile found, connection OK, no version mismatch treated as fatal) against `warehouse-postgres`. `make dbt-run` (with zero models defined yet) completes successfully with "0 of 0 models" rather than erroring. `dbt source freshness` or a simple `select * from {{ source('raw', 'files') }}` compiles and executes against the real `raw_files` table, proving the source declaration resolves to the actual warehouse schema, not just a config that parses.
 - **Dependencies:** M2.4 (`warehouse-postgres` exists); M2.5/M2.6 (the 4 Raw tables + their `_cdc_*` columns exist, for the source declaration to point at).
 - **Out-of-scope:**
-  - Any Silver/Gold/Mart models — M3.2 onward.
+  - Any staging/intermediate/marts models — M3.2 onward.
   - dbt tests (`dbt test`) on sources or models — nothing to test yet with zero models; introduced alongside the first real model.
-  - A dedicated `raw` schema in the warehouse — Raw tables stay in `public` (where M2.5 put them); the dbt source declaration points at `public`, not a renamed schema. Revisit only if Silver/Gold's own schema needs force a reorganization.
+  - A dedicated `raw` schema in the warehouse — Raw tables stay in `public` (where M2.5 put them); the dbt source declaration points at `public`, not a renamed schema. Revisit only if staging/intermediate's own schema needs force a reorganization.
   - dbt packages / `packages.yml` (e.g. `dbt_utils`) — add only if a specific model in M3.2+ actually needs one.
 - **Automated Test Plan:**
   - *Integration:* `tests/integration/test_dbt_scaffold.sh` — brings the stack up, runs `docker compose run --rm dbt debug` and asserts a zero exit code and no "ERROR" in output; runs `docker compose run --rm dbt run` and asserts it completes (0 models, not a failure); runs a one-off `dbt show` (or equivalent compiled query) against the `raw` source's `files` table and asserts it returns the seeded/simulated row count, proving the source resolves to live data.
 - **Manual Test Plan:**
   - `make up`, `make dbt-debug` — confirm all checks pass, in particular the connection check against `warehouse-postgres`.
-  - Inspect `warehouse/dbt/models/sources.yml` — confirm all 4 Raw tables are declared with their actual column names matching `warehouse/ddl/`.
+  - Inspect `warehouse/dbt/models/staging/__sources.yml` — confirm all 4 Raw tables are declared with their actual column names matching `warehouse/ddl/`.
   - `make register-connector` — confirm both `ods-source` and `warehouse-raw-sink` are reported `RUNNING` (connector and task); without this step no data reaches the warehouse and `dbt show` below would return 0, not 1.
   - `make simulate COUNT=1`, then `docker compose run --rm dbt show --inline "select count(*) from {{ source('raw','files') }}"` (run inside the `dbt` container, not the host — there is no `~/.dbt` profile on the host; `DBT_PROFILES_DIR` is only set for the container) — confirm the count reflects the real row.
+- **Amended implementation (D015):** After M3.1 merged, the project adopted dbt-native project structure as its standard (`models/staging/`, `models/intermediate/`, `models/marts/`; `stg_`/`int_`/`fct_`/`dim_` naming; medallion terms kept only as a cross-reference — see [D015](Decisions.md#d015)). M3.1's one structural conflict with that standard is corrected here, scoped to M3.1's own artifacts: the source declaration moved from `warehouse/dbt/models/sources.yml` to its dbt-native home `warehouse/dbt/models/staging/__sources.yml` (content unchanged; the `raw` source still resolves, verified by `test_dbt_scaffold.sh`). Everything else M3.1 built is convention-agnostic and unchanged. This change also updates `Technical-Design.md` to document the new standard (§3 layer rename + medallion cross-reference map). The remaining applications of D015 — the `stg_`/`int_`/`fct_` model *implementations* and per-folder materialization defaults in `dbt_project.yml` — are **not** in this amendment; they belong to M3.2 and its own change, since they concern models that do not exist yet.
 
-**M3.2 — Silver models**
-- **Test:** Silver models deduplicate redelivered Kafka records and resolve out-of-order arrival by `_cdc_ts`, producing one current row per `file_id` / `file_action_id`
-- **Acceptance:** `dbt test` on Silver enforces uniqueness on the entity key; a manually duplicated Raw row collapses to one Silver row
+**M3.2 — Staging models**
+- **Test:** Staging models (`stg_*`) deduplicate redelivered Kafka records and resolve out-of-order arrival by `_cdc_ts`, producing one current row per `file_id` / `file_action_id`
+- **Acceptance:** `dbt test` on the staging models enforces uniqueness on the entity key; a manually duplicated Raw row collapses to one staging row
 
-**M3.3 — Gold models**
-- **Test:** Gold joins `file_actions` to `files` and `parties`, deriving step number and party role per step
-- **Acceptance:** Gold row count equals Silver `file_actions` row count (1:1); every row resolves a non-null step number and role
+**M3.3 — Intermediate models**
+- **Test:** Intermediate models (`int_*`) join `file_actions` to `files` and `parties`, deriving step number and party role per step
+- **Acceptance:** Intermediate row count equals the staging `file_actions` row count (1:1); every row resolves a non-null step number and role
 
-**M3.4 — Metric Mart: turnaround (U1)**
-- **Test:** Mart computes per-step turnaround (`received_at − sent_at`) and aggregates (mean, p90) by step, for closed/live/positive-duration steps only (FR-3)
-- **Acceptance:** Hand-computed turnaround for the M1.2 seed file matches the Mart's output exactly
+**M3.4 — Marts: turnaround (U1)**
+- **Test:** The marts layer computes per-step turnaround (`received_at − sent_at`) in `fct_step_turnaround` and aggregates (mean, p90) by step in `agg_step_turnaround`, for closed/live/positive-duration steps only (FR-3)
+- **Acceptance:** Hand-computed turnaround for the M1.2 seed file matches the marts output exactly
 
 ### M4: Governed analyst surface
 
 **M4.1 — Analyst query interface**
-- **Test:** SQL view/query interface exposes `step_turnaround_summary` (mean, p90, count by step) with no per-file or per-party detail
+- **Test:** SQL view/query interface exposes `agg_step_turnaround` (mean, p90, count by step) with no per-file or per-party detail
 - **Acceptance:** Analyst can answer U1 ("average and 90th-percentile turnaround by step, for closed files") in one query
 
 **M4.2 — PII exclusion**
-- **Test:** Inspect the Mart's analyst-facing views for any user, name, email, or file-identifying column
+- **Test:** Inspect the marts layer's analyst-facing views for any user, name, email, or file-identifying column
 - **Acceptance:** No such column exists in the view definition (verified by construction, not just by convention — NFR-2)
 
 ### M5: Party-scoped consumer surface
 
-**M5.1 — RLS policies on the Mart**
-- **Test:** PostgreSQL row-level security policies applied to Mart tables, scoping rows to the requesting `party_id`
-- **Acceptance:** Policies exist and are enabled (`rowsecurity = true`) on every party-facing Mart table
+**M5.1 — RLS policies on the marts layer**
+- **Test:** PostgreSQL row-level security policies applied to marts tables, scoping rows to the requesting `party_id`
+- **Acceptance:** Policies exist and are enabled (`rowsecurity = true`) on every party-facing marts table
 
 **M5.2 — Mocked party authentication**
 - **Test:** A lightweight auth mock maps a test credential to a `party_id` (or set of `party_id`s via `user_party`)
@@ -301,11 +302,11 @@ milestone's own acceptance criteria.
 - **Acceptance:** DAG runs succeed on schedule; new ODS rows appear after each run
 
 **M6.2 — Airflow: dbt run DAG**
-- **Test:** Airflow DAG runs `dbt build` (Silver → Gold → Mart) on an interval short enough to leave headroom in the 10-minute freshness budget
-- **Acceptance:** DAG runs succeed on schedule; Mart reflects new Raw data after each run
+- **Test:** Airflow DAG runs `dbt build` (staging → intermediate → marts) on an interval short enough to leave headroom in the 10-minute freshness budget
+- **Acceptance:** DAG runs succeed on schedule; the marts layer reflects new Raw data after each run
 
 **M6.3 — End-to-end freshness**
-- **Test:** Commit a simulated write to the ODS; measure time until it is visible in the analyst Mart view (NFR-1, [§7 success metrics](Requirements.md#7-success-metrics))
+- **Test:** Commit a simulated write to the ODS; measure time until it is visible in the analyst marts view (NFR-1, [§7 success metrics](Requirements.md#7-success-metrics))
 - **Acceptance:** Measured lag is ≤ 10 minutes across at least 3 trials; the dominant latency source (dbt run interval) is documented
 
 ### M7: Expand simulator to full workflow

@@ -1,0 +1,19 @@
+# Declares the existing Raw tables (M2.5/M2.6) as dbt sources -- the raw
+# landed layer (Bronze, in medallion terms). No models reference them yet;
+# the staging models (stg_*) that build on them start in M3.2. Lives at the
+# dbt-native location models/staging/__sources.yml per the project's adopted
+# convention. See design/Milestones.md M3.1 and design/Decisions.md D015.
+version: 2
+
+sources:
+  - name: raw
+    schema: public
+    tables:
+      - name: files
+        identifier: raw_files
+      - name: file_actions
+        identifier: raw_file_actions
+      - name: parties
+        identifier: raw_parties
+      - name: audit_events
+        identifier: raw_audit_events
