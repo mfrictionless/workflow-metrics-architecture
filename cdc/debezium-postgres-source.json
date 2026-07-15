@@ -12,6 +12,7 @@
     "slot.name": "dbz_slot",
     "publication.name": "dbz_publication",
     "publication.autocreate.mode": "disabled",
-    "table.include.list": "public.files,public.file_actions,public.parties,public.audit_events"
+    "table.include.list": "public.files,public.file_actions,public.parties,public.audit_events",
+    "provide.transaction.metadata": "true"
   }
 }
