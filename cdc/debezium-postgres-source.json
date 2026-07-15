@@ -1,0 +1,17 @@
+{
+  "name": "ods-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "ods-postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "ods",
+    "topic.prefix": "ods",
+    "plugin.name": "pgoutput",
+    "slot.name": "dbz_slot",
+    "publication.name": "dbz_publication",
+    "publication.autocreate.mode": "disabled",
+    "table.include.list": "public.files,public.file_actions,public.parties,public.audit_events"
+  }
+}

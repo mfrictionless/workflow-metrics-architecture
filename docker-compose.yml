@@ -49,6 +49,33 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
+  # Kafka Connect worker (Debezium Postgres connector plugin pre-installed) --
+  # distributed mode with a single worker: connector config/offsets/status
+  # live in Kafka topics (below), not local files, so the worker holds no
+  # state outside Kafka or the volumes already declared. The actual source
+  # connector (cdc/debezium-postgres-source.json) is registered separately
+  # via the REST API -- this service only brings the worker itself up. See
+  # design/Milestones.md M2.3.
+  kafka-connect:
+    image: quay.io/debezium/connect:latest
+    depends_on:
+      - kafka
+      - ods-postgres
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect-configs
+      OFFSET_STORAGE_TOPIC: connect-offsets
+      STATUS_STORAGE_TOPIC: connect-status
+      # Single-broker dev setup, same reasoning as M2.2's internal Kafka
+      # topics: replication factor 1, not the default 3.
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+    ports:
+      - "${CONNECT_REST_PORT}:8083"
+
   # On-demand job, not a long-running service -- `profiles` keeps it out of a
   # bare `docker compose up`; run explicitly via `docker compose run simulator`
   # (make simulate), which targets a named service regardless of profile.

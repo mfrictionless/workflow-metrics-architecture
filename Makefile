@@ -6,7 +6,7 @@ include .env
 # default -- Make applies COUNT ?= only when COUNT wasn't already set.
 COUNT ?= $(SIMULATOR_FILE_COUNT)
 
-.PHONY: up down seed simulate test test-fast test-integration
+.PHONY: up down seed simulate register-connector test test-fast test-integration
 
 # Bring the compose stack up. Fails with an actionable message (pointing at
 # .env) on a port conflict, rather than Docker's raw daemon error.
@@ -26,6 +26,13 @@ seed:
 # Override per-run: make simulate COUNT=1000
 simulate:
 	@COUNT=$(COUNT) ./scripts/simulate.sh
+
+# Register (or update) the Debezium Postgres source connector against the
+# running Kafka Connect worker's REST API. Explicit and separate from `up`,
+# same reasoning as `make seed`: registering a connector is a one-off action
+# against an already-running worker, not part of bringing the stack up.
+register-connector:
+	@./scripts/register_connector.sh
 
 # Run every test in the repo: fast tier, then integration tier. Fail-fast --
 # stops at the first failing script.

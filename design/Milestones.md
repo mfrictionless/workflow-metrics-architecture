@@ -168,8 +168,23 @@ milestone's own acceptance criteria.
   - `streaming/` (per Technical-Design.md §9) was not created for this milestone — Kafka's entire KRaft configuration is expressible via `docker-compose.yml` environment variables, no custom Dockerfile or config file needed. Left `planned`; M2.3 (Kafka Connect worker + connector configs) is the more likely milestone to first need real files there.
 
 **M2.3 — Debezium source connector**
-- **Test:** Debezium Postgres connector deployed to Kafka Connect; captures ODS changes as JSON
-- **Acceptance:** An ODS write (from M1.2 or M1.3) appears as a message on the corresponding Kafka topic within seconds, with correct before/after payload
+- **Test:** A Kafka Connect worker (`debezium/connect` image — Kafka Connect bundled with the Debezium Postgres connector plugin pre-installed) runs in **distributed mode with a single worker**: connector config, offsets, and status are stored in Kafka topics (`connect-configs`, `connect-offsets`, `connect-status`, replication factor 1 — same single-broker constraint as M2.2's internal topics), not local files, so the worker holds no state outside Kafka. A connector config (`cdc/debezium-postgres-source.json`) is registered against the worker's REST API (`POST /connectors`); it consumes the **existing** `dbz_slot`/`dbz_publication` created in M2.1 (`plugin.name=pgoutput`, `slot.name=dbz_slot`, `publication.name=dbz_publication`) rather than creating its own, and publishes each of the 4 source tables to its own topic under `topic.prefix=ods` (e.g. `ods.public.files`).
+- **Acceptance:** From a clean checkout, `make up` brings up the Connect worker and it accepts REST calls (`GET /connectors` returns `200`) within a bounded startup window; `make register-connector` succeeds and the connector's status is `RUNNING` with its task also `RUNNING` (confirmed as a race in testing — `connector.state` can read `RUNNING` a moment before `tasks[0].state` does, so both must be polled together, not just the top-level state); inserting a row into any of the 4 ODS tables (e.g. via `make seed`) produces a message on that table's topic (`ods.public.<table>`) within seconds, with a JSON payload whose `after` block matches the inserted row and whose `before` block is `null` (insert, not update); re-running `make register-connector` against an already-registered connector is idempotent (`PUT /connectors/<name>/config`, checked via a GET first) rather than erroring or duplicating.
+- **Dependencies:** M2.1 (`dbz_slot`/`dbz_publication` must already exist — this connector consumes them, it does not create them); M2.2 (Kafka broker for the Connect worker's internal topics and the tables' output topics).
+- **Out-of-scope:**
+  - The JDBC sink connector (landing these messages into the warehouse) — M2.5.
+  - Schema Registry / Avro — already decided against (Technical-Design.md §2: plain JSON).
+  - Multiple Connect workers / worker failover — single-node distributed mode only, per the working-example scope.
+  - `UPDATE`/`DELETE` payload handling beyond what Debezium produces by default — this working example's ODS is insert-only (Technical-Design.md §2's no-hard-deletes assumption), so only the `INSERT` case is exercised.
+  - Kafka Connect's own metrics/monitoring endpoints.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_debezium_connector.sh` — brings the stack up, waits for the Connect REST API to accept connections, registers `cdc/debezium-postgres-source.json` (or confirms it's already registered), polls connector status until `RUNNING`, inserts a seed file via `scripts/seed.sh`, then consumes from the `ods.public.files` and `ods.public.file_actions` topics and asserts a message appears for each with a non-null `after` payload matching the inserted row and a `null` `before` payload. Tears down after.
+- **Manual Test Plan:**
+  - `make up`, `curl localhost:${CONNECT_REST_PORT}/connectors` — confirm the worker responds.
+  - `make register-connector`, `curl .../connectors/ods-source/status` — confirm both `connector.state` and `tasks[0].state` are `RUNNING`.
+  - `make seed`, then consume from `ods.public.files` (`kafka-console-consumer.sh`) — confirm the seeded row appears as a JSON message within seconds.
+  - Re-run `make register-connector` a second time — confirm no error and `GET /connectors` still lists exactly one `ods-source` connector.
+  - `docker compose restart kafka-connect` (not `make down`) — confirm the connector config is still registered with no re-registration needed (`GET /connectors` still lists it); status briefly reports `UNASSIGNED` for the connector-level state during the worker's post-restart rebalance before settling back to `RUNNING` — noted here rather than silently assumed instantaneous.
 
 **M2.4 — Warehouse PostgreSQL**
 - **Test:** Second, separate PostgreSQL instance provisioned for Raw/Silver/Gold/Mart
