@@ -1,3 +1,9 @@
 .claude
 __pycache__/
 *.pyc
+
+# dbt runtime artifacts (warehouse/dbt/)
+.user.yml
+logs/
+target/
+dbt_packages/

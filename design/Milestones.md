@@ -238,8 +238,21 @@ milestone's own acceptance criteria.
 ### M3: Metric compute (dbt)
 
 **M3.1 — dbt project scaffold**
-- **Test:** dbt Core project connects to the warehouse Postgres; `dbt debug` passes
-- **Acceptance:** Project runs against Raw tables as dbt sources with no connection errors
+- **Test:** A dbt Core project (`warehouse/dbt/`) connects to `warehouse-postgres` and declares the 4 existing Raw tables (`raw_files`, `raw_file_actions`, `raw_parties`, `raw_audit_events` — M2.5/M2.6) as dbt sources, with no models yet. Run via a new `dbt` service in `docker-compose.yml` — `ghcr.io/dbt-labs/dbt-postgres:1.8.latest` (the official dbt Labs image with the Postgres adapter pre-installed), `profiles: ["tools"]` like the `simulator` service, invoked via `docker compose run`, not a long-running container. This image has no `arm64` build (confirmed by inspecting its manifest — every tag checked is `amd64`-only), so the service requires `platform: linux/amd64` (Rosetta emulation on Apple Silicon) — the same constraint Debezium's own docs flagged for `quay.io/debezium/connect` builds, now hit directly rather than just noted.
+- **Acceptance:** From a clean checkout, `make up` followed by `make dbt-debug` runs `dbt debug` inside the container and reports all checks passing (profile found, connection OK, no version mismatch treated as fatal) against `warehouse-postgres`. `make dbt-run` (with zero models defined yet) completes successfully with "0 of 0 models" rather than erroring. `dbt source freshness` or a simple `select * from {{ source('raw', 'files') }}` compiles and executes against the real `raw_files` table, proving the source declaration resolves to the actual warehouse schema, not just a config that parses.
+- **Dependencies:** M2.4 (`warehouse-postgres` exists); M2.5/M2.6 (the 4 Raw tables + their `_cdc_*` columns exist, for the source declaration to point at).
+- **Out-of-scope:**
+  - Any Silver/Gold/Mart models — M3.2 onward.
+  - dbt tests (`dbt test`) on sources or models — nothing to test yet with zero models; introduced alongside the first real model.
+  - A dedicated `raw` schema in the warehouse — Raw tables stay in `public` (where M2.5 put them); the dbt source declaration points at `public`, not a renamed schema. Revisit only if Silver/Gold's own schema needs force a reorganization.
+  - dbt packages / `packages.yml` (e.g. `dbt_utils`) — add only if a specific model in M3.2+ actually needs one.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_dbt_scaffold.sh` — brings the stack up, runs `docker compose run --rm dbt debug` and asserts a zero exit code and no "ERROR" in output; runs `docker compose run --rm dbt run` and asserts it completes (0 models, not a failure); runs a one-off `dbt show` (or equivalent compiled query) against the `raw` source's `files` table and asserts it returns the seeded/simulated row count, proving the source resolves to live data.
+- **Manual Test Plan:**
+  - `make up`, `make dbt-debug` — confirm all checks pass, in particular the connection check against `warehouse-postgres`.
+  - Inspect `warehouse/dbt/models/sources.yml` — confirm all 4 Raw tables are declared with their actual column names matching `warehouse/ddl/`.
+  - `make register-connector` — confirm both `ods-source` and `warehouse-raw-sink` are reported `RUNNING` (connector and task); without this step no data reaches the warehouse and `dbt show` below would return 0, not 1.
+  - `make simulate COUNT=1`, then `docker compose run --rm dbt show --inline "select count(*) from {{ source('raw','files') }}"` (run inside the `dbt` container, not the host — there is no `~/.dbt` profile on the host; `DBT_PROFILES_DIR` is only set for the container) — confirm the count reflects the real row.
 
 **M3.2 — Silver models**
 - **Test:** Silver models deduplicate redelivered Kafka records and resolve out-of-order arrival by `_cdc_ts`, producing one current row per `file_id` / `file_action_id`

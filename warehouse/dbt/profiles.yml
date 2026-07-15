@@ -1,0 +1,16 @@
+# Local working-example defaults, matching .env's committed-defaults pattern
+# (not for production use). Connects to warehouse-postgres over the compose
+# network (internal port 5432), not the host-published WAREHOUSE_POSTGRES_PORT.
+# See design/Milestones.md M3.1.
+workflow_metrics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: warehouse-postgres
+      port: 5432
+      user: "{{ env_var('WAREHOUSE_POSTGRES_USER') }}"
+      password: "{{ env_var('WAREHOUSE_POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('WAREHOUSE_POSTGRES_DB') }}"
+      schema: public
+      threads: 4

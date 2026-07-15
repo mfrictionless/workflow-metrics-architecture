@@ -1,0 +1,17 @@
+# Declares the existing Raw tables (M2.5/M2.6) as dbt sources. No models
+# reference them yet -- that starts with Silver in M3.2. See
+# design/Milestones.md M3.1.
+version: 2
+
+sources:
+  - name: raw
+    schema: public
+    tables:
+      - name: files
+        identifier: raw_files
+      - name: file_actions
+        identifier: raw_file_actions
+      - name: parties
+        identifier: raw_parties
+      - name: audit_events
+        identifier: raw_audit_events

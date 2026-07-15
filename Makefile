@@ -6,7 +6,7 @@ include .env
 # default -- Make applies COUNT ?= only when COUNT wasn't already set.
 COUNT ?= $(SIMULATOR_FILE_COUNT)
 
-.PHONY: up down seed simulate register-connector test test-fast test-integration
+.PHONY: up down seed simulate register-connector dbt-debug dbt-run test test-fast test-integration
 
 # Bring the compose stack up. Fails with an actionable message (pointing at
 # .env) on a port conflict, rather than Docker's raw daemon error.
@@ -34,6 +34,15 @@ simulate:
 # already-running worker, not part of bringing the stack up.
 register-connector:
 	@./scripts/register_connector.sh
+
+# dbt Core against the warehouse (Raw -> Silver -> Gold -> Mart, M3+). Both
+# are one-off actions against an already-running warehouse-postgres, same
+# reasoning as `make seed` -- not part of bringing the stack up.
+dbt-debug:
+	@docker compose run --rm dbt debug
+
+dbt-run:
+	@docker compose run --rm dbt run
 
 # Run every test in the repo: fast tier, then integration tier. Fail-fast --
 # stops at the first failing script.

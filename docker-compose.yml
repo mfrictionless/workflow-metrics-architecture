@@ -93,6 +93,28 @@ services:
     ports:
       - "${CONNECT_REST_PORT}:8083"
 
+  # dbt Core project (Raw -> Silver -> Gold -> Mart, M3+), run on demand via
+  # `docker compose run`, not a long-running service. Official dbt Labs image
+  # (Postgres adapter pre-installed) has no arm64 build -- platform pinned to
+  # linux/amd64 (Rosetta emulation on Apple Silicon), confirmed by inspecting
+  # its manifest. Project files mounted straight into the image's default
+  # working dir; profiles.yml lives alongside dbt_project.yml in the same
+  # mount, found via DBT_PROFILES_DIR rather than dbt's default ~/.dbt/.
+  # See design/Milestones.md M3.1.
+  dbt:
+    image: ghcr.io/dbt-labs/dbt-postgres:1.8.latest
+    platform: linux/amd64
+    profiles: ["tools"]
+    depends_on:
+      - warehouse-postgres
+    environment:
+      DBT_PROFILES_DIR: /usr/app/dbt
+      WAREHOUSE_POSTGRES_USER: ${WAREHOUSE_POSTGRES_USER}
+      WAREHOUSE_POSTGRES_PASSWORD: ${WAREHOUSE_POSTGRES_PASSWORD}
+      WAREHOUSE_POSTGRES_DB: ${WAREHOUSE_POSTGRES_DB}
+    volumes:
+      - ./warehouse/dbt:/usr/app/dbt
+
   # On-demand job, not a long-running service -- `profiles` keeps it out of a
   # bare `docker compose up`; run explicitly via `docker compose run simulator`
   # (make simulate), which targets a named service regardless of profile.
