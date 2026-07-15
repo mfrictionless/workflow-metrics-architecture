@@ -55,6 +55,12 @@ End-to-end flow: **simulator → ODS → CDC (Debezium/Kafka) → raw landing �
       └──────────────┘      └──────────────────┘
 ```
 
+Debezium's Postgres source connector (M2.3) captures ODS writes in two distinct
+phases, each with its own state at the ODS, Kafka Connect, and Kafka layers:
+
+- [Snapshot phase](diagrams/snapshot-phase.png) — the one-time initial read of rows that existed before the connector first started.
+- [Streaming phase](diagrams/streaming-phase.png) — ongoing, incremental capture of new writes via WAL logical decoding.
+
 ---
 
 ## 2. Component choices
