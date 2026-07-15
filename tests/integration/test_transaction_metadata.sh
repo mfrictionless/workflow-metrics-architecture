@@ -59,8 +59,12 @@ while [ "$i" -lt 30 ]; do
 done
 [ "$running" -eq 1 ] || err "sink connector/task did not both reach RUNNING within 30s"
 
-# 1. One simulated file -- files/parties/file_actions inserted under a
-# single conn.commit() -- must share one _cdc_source_txn_id across tables.
+# 1. One simulated file. Its lifecycle (M2.8) is two transactions: a single
+# INSERT commit across files/parties/file_actions, then an UPDATE commit. The
+# cross-table correlation this milestone (M2.6) proves is about the INSERT
+# phase, so we filter to the create rows (_cdc_op='c'): those must share one
+# _cdc_source_txn_id across all three tables. Per file the lifecycle lands 2
+# raw_files rows (c+u), 8 raw_file_actions (4 c + 4 u), 6 raw_parties (c only).
 COUNT=1 ./scripts/simulate.sh >/dev/null
 
 wait_count() {
@@ -76,26 +80,27 @@ wait_count() {
   return 1
 }
 
-wait_count raw_files 1 || err "expected 1 row in raw_files within 30s of the first simulate run"
+wait_count raw_files 2 || err "expected 2 rows in raw_files (c+u) within 30s of the first simulate run"
 wait_count raw_parties 6 || err "expected 6 rows in raw_parties within 30s of the first simulate run"
-wait_count raw_file_actions 4 || err "expected 4 rows in raw_file_actions within 30s of the first simulate run"
+wait_count raw_file_actions 8 || err "expected 8 rows in raw_file_actions (4 c + 4 u) within 30s of the first simulate run"
 
-files_txn=$(psql_wh "SELECT _cdc_source_txn_id FROM raw_files WHERE file_id = 1;" | tr -d '[:space:]')
-[ -n "$files_txn" ] || err "expected a non-null _cdc_source_txn_id on raw_files"
+files_txn=$(psql_wh "SELECT _cdc_source_txn_id FROM raw_files WHERE file_id = 1 AND _cdc_op='c';" | tr -d '[:space:]')
+[ -n "$files_txn" ] || err "expected a non-null _cdc_source_txn_id on the raw_files create row"
 
-parties_txns=$(psql_wh "SELECT DISTINCT _cdc_source_txn_id FROM raw_parties WHERE file_id = 1;" | tr -d '[:space:]')
-[ "$parties_txns" = "$files_txn" ] || err "expected raw_parties for file_id=1 to share _cdc_source_txn_id=$files_txn, got: $parties_txns"
+parties_txns=$(psql_wh "SELECT DISTINCT _cdc_source_txn_id FROM raw_parties WHERE file_id = 1 AND _cdc_op='c';" | tr -d '[:space:]')
+[ "$parties_txns" = "$files_txn" ] || err "expected raw_parties create rows for file_id=1 to share _cdc_source_txn_id=$files_txn, got: $parties_txns"
 
-actions_txns=$(psql_wh "SELECT DISTINCT _cdc_source_txn_id FROM raw_file_actions WHERE file_id = 1;" | tr -d '[:space:]')
-[ "$actions_txns" = "$files_txn" ] || err "expected raw_file_actions for file_id=1 to share _cdc_source_txn_id=$files_txn, got: $actions_txns"
+actions_txns=$(psql_wh "SELECT DISTINCT _cdc_source_txn_id FROM raw_file_actions WHERE file_id = 1 AND _cdc_op='c';" | tr -d '[:space:]')
+[ "$actions_txns" = "$files_txn" ] || err "expected raw_file_actions create rows for file_id=1 to share _cdc_source_txn_id=$files_txn, got: $actions_txns"
 
-# 2. A second, separate simulate run must get a DIFFERENT transaction id.
+# 2. A second, separate simulate run must get a DIFFERENT transaction id for
+# its INSERT phase (raw_files now has 4 rows total: 2 per file).
 COUNT=1 ./scripts/simulate.sh >/dev/null
 
-wait_count raw_files 2 || err "expected 2 rows in raw_files within 30s of the second simulate run"
+wait_count raw_files 4 || err "expected 4 rows in raw_files within 30s of the second simulate run"
 
-second_txn=$(psql_wh "SELECT _cdc_source_txn_id FROM raw_files WHERE file_id = 2;" | tr -d '[:space:]')
-[ "$second_txn" != "$files_txn" ] || err "expected the second simulate run's _cdc_source_txn_id to differ from the first ($files_txn), got the same value"
+second_txn=$(psql_wh "SELECT _cdc_source_txn_id FROM raw_files WHERE file_id = 2 AND _cdc_op='c';" | tr -d '[:space:]')
+[ "$second_txn" != "$files_txn" ] || err "expected the second simulate run's create _cdc_source_txn_id to differ from the first ($files_txn), got the same value"
 
 # 3. _cdc_txn_id (the richer transaction.id) is populated but NOT expected
 # to be equal across rows in the same transaction -- just non-null here.

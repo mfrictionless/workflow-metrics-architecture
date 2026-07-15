@@ -74,3 +74,25 @@ def build_file(file_number, base_ts):
     }
 
     return {"file": file_row, "parties": parties, "file_actions": file_actions}
+
+
+def open_state(file_data):
+    """Derive the initial WIP snapshot from a built (closed) file: the file
+    before it closed (status WIP, no closed_at) and its actions before they
+    were received (sent side only; received_at / received_user_id null).
+    `parties` are unchanged -- a party assignment doesn't mutate over the
+    lifecycle. This is what the M2.8 lifecycle simulator INSERTs first; it
+    then UPDATEs the file/actions to the closed state (`file_data`), so the
+    CDC stream carries a create then an update per key. Does not mutate its
+    input. See design/Milestones.md M2.8.
+    """
+    open_file = {**file_data["file"], "status": "WIP", "closed_at": None}
+    open_actions = [
+        {**action, "received_at": None, "received_user_id": None}
+        for action in file_data["file_actions"]
+    ]
+    return {
+        "file": open_file,
+        "parties": file_data["parties"],
+        "file_actions": open_actions,
+    }
