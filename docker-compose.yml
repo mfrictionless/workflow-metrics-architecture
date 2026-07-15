@@ -64,6 +64,7 @@ services:
       - "${WAREHOUSE_POSTGRES_PORT}:5432"
     volumes:
       - warehouse_data:/var/lib/postgresql/data
+      - ./warehouse/ddl:/docker-entrypoint-initdb.d:ro
 
   # Kafka Connect worker (Debezium Postgres connector plugin pre-installed) --
   # distributed mode with a single worker: connector config/offsets/status

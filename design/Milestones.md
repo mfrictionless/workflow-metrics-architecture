@@ -203,8 +203,21 @@ milestone's own acceptance criteria.
   - `make down`, confirm both volumes are removed.
 
 **M2.5 — JDBC sink connector**
-- **Test:** Kafka Connect JDBC sink connector lands topic messages into Raw tables in the warehouse
-- **Acceptance:** Raw tables mirror ODS row counts after a batch of simulator writes; `_cdc_op`, `_cdc_ts`, `_sink_ts` populated per row
+- **Test:** A Debezium JDBC sink connector (`io.debezium.connector.jdbc.JdbcSinkConnector`) registered against the same `kafka-connect` worker from M2.3 — no new image or plugin install, since the `quay.io/debezium/connect` image already bundles this plugin. Chosen over Confluent's `kafka-connect-jdbc` to sidestep that connector's Community License question entirely (Debezium's JDBC sink is Apache 2.0). Consumes all 4 `ods.public.*` topics (M2.3) via a topic regex and lands each as its own append-only Raw table (`raw_files`, `raw_file_actions`, `raw_parties`, `raw_audit_events`) in `warehouse-postgres` (M2.4). Raw tables are **hand-written DDL** (`warehouse/ddl/001_raw_schema.sql`, mounted the same way as `ods/ddl/`), not the connector's own schema evolution — reversing the draft's original plan once testing showed schema evolution can't produce `_sink_ts` (a Postgres-side `DEFAULT now()`, not a value carried on the Kafka message) without a racy after-the-fact `ALTER TABLE`. `_cdc_op`/`_cdc_ts` are stamped onto each message by an SMT chain (`ExtractNewRecordState` + a field rename) before the sink writes it; `_cdc_ts` is Debezium's event timestamp, not the ODS row's own timestamp columns.
+- **Acceptance:** From a clean checkout, `make up` + `make register-connector` (generalized to loop over every `cdc/*.json` config, registering both the source and sink connectors) results in the sink connector reaching `RUNNING` with its task also `RUNNING`; after `make seed`, each Raw table's row count matches the corresponding ODS table's row count; every landed row carries non-null `_cdc_op` (`c` for an insert-only source), `_cdc_ts`, and `_sink_ts`. Landing is append-only: a redelivered or duplicate Kafka message produces another Raw row rather than an upsert — deduplication is explicitly Silver's job (M3.2), not Raw's. `make register-connector` run twice is idempotent for both connectors.
+- **Dependencies:** M2.3 (source connector + `ods.public.*` topics must exist); M2.4 (`warehouse-postgres` as the landing target).
+- **Out-of-scope:**
+  - Deduplication of redelivered records, or resolving out-of-order arrival — Silver's job (M3.2). Raw is a faithful, append-only landing of every message received.
+  - `UPDATE`/`DELETE` handling beyond what the source connector produces — same insert-only assumption as M2.3 (Technical-Design.md §2).
+  - Schema Registry / Avro — already decided against.
+  - Foreign keys, `NOT NULL`, or `CHECK` constraints on Raw tables — deliberately unconstrained; Raw faithfully lands whatever arrived, per-topic, independently ordered. Correctness constraints belong to Silver.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_jdbc_sink.sh` — brings the stack up, registers both connectors, waits for the sink connector/task to reach `RUNNING`, runs `make seed`, polls for the row to land (the pipeline is asynchronous), then asserts each of the 3 seeded Raw tables' row count matches its ODS counterpart, `_cdc_op`/`_cdc_ts`/`_sink_ts` are non-null on every `raw_files` row, and `_cdc_op='c'`.
+- **Manual Test Plan:**
+  - `make up`, `make register-connector`, confirm both `ods-source` and `warehouse-raw-sink` show `RUNNING` (connector and task) via the REST API.
+  - `make seed`, then `psql` into `warehouse-postgres` and confirm `raw_files` (etc.) exist with the seeded rows and populated `_cdc_op`/`_cdc_ts`/`_sink_ts`.
+  - `make simulate COUNT=3`, confirm the Raw row counts grow by 3 per table, matching the ODS.
+  - Re-run `make register-connector` — confirm no error and no duplicate connectors (`GET /connectors` still lists exactly `ods-source` and `warehouse-raw-sink`).
 
 ### M3: Metric compute (dbt)
 

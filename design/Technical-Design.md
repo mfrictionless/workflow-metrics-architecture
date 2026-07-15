@@ -244,9 +244,8 @@ sequence is reordered.
 |--------|-----------------------------------------|--------|
 | `ods/` | PostgreSQL ODS (source DDL, seed data) | exists |
 | `simulator/` | Python simulator | exists |
-| `streaming/` | Kafka (KRaft) broker + Kafka Connect worker | planned |
 | `cdc/` | Debezium source connector + JDBC sink connector configs | exists |
-| `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | planned |
+| `warehouse/` | Warehouse PostgreSQL + dbt project (Raw → Silver → Gold → Mart) | exists |
 | `orchestration/` | Airflow DAGs | planned |
 | `consumers/` | Analyst query surface + party REST API | planned |
 

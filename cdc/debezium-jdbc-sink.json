@@ -1,0 +1,25 @@
+{
+  "name": "warehouse-raw-sink",
+  "config": {
+    "connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "topics.regex": "ods\\.public\\..*",
+    "connection.url": "jdbc:postgresql://warehouse-postgres:5432/warehouse",
+    "connection.username": "postgres",
+    "connection.password": "postgres",
+    "insert.mode": "insert",
+    "delete.enabled": "false",
+    "primary.key.mode": "none",
+    "schema.evolution": "none",
+    "consumer.override.metadata.max.age.ms": "5000",
+    "consumer.override.auto.offset.reset": "earliest",
+    "transforms": "unwrap,rename,retopic",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.add.fields": "op,source.ts_ms",
+    "transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.rename.renames": "__op:_cdc_op,__source_ts_ms:_cdc_ts",
+    "transforms.retopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.retopic.regex": "ods\\.public\\.(.*)",
+    "transforms.retopic.replacement": "raw_$1"
+  }
+}

@@ -14,8 +14,12 @@ err() { printf 'FAIL: %s\n' "$1" >&2; fail=1; }
 # Folders that exist today. Each milestone appends its own folder as it is created.
 EXISTING="ods"
 
-# Every component folder the layout map must document.
-DOCUMENTED="ods simulator streaming cdc warehouse orchestration consumers"
+# Every component folder the layout map must document. streaming/ isn't
+# listed: Kafka broker (M2.2) and Kafka Connect worker (M2.3) config are
+# both fully expressible via docker-compose.yml env vars, with no
+# indication a real file will ever be needed there -- see
+# design/Technical-Design.md §9.
+DOCUMENTED="ods simulator cdc warehouse orchestration consumers"
 
 # 1. The layout section exists.
 grep -q "Repository layout" "$LAYOUT" || err "Technical-Design.md has no 'Repository layout' section"

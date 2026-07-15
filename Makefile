@@ -27,10 +27,11 @@ seed:
 simulate:
 	@COUNT=$(COUNT) ./scripts/simulate.sh
 
-# Register (or update) the Debezium Postgres source connector against the
-# running Kafka Connect worker's REST API. Explicit and separate from `up`,
-# same reasoning as `make seed`: registering a connector is a one-off action
-# against an already-running worker, not part of bringing the stack up.
+# Register (or update) every connector in cdc/*.json -- the Debezium
+# Postgres source (M2.3) and JDBC sink (M2.5) -- against the running Kafka
+# Connect worker's REST API. Explicit and separate from `up`, same reasoning
+# as `make seed`: registering a connector is a one-off action against an
+# already-running worker, not part of bringing the stack up.
 register-connector:
 	@./scripts/register_connector.sh
 
