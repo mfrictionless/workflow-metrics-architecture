@@ -54,5 +54,6 @@ For the top-level component/folder layout of the monorepo, see [Technical-Design
 - **RACI** — Responsible, Accountable, Consulted, Informed; a responsibility-assignment
   model (R performs, A owns the outcome, C is consulted, I is notified).
 - **SLA** — service-level agreement; a per-step or per-stage time target.
+- **SMT** — Single Message Transform; a Kafka Connect mechanism for applying small, composable, per-record transformations (rename/add/drop a field, reroute to another topic, etc.) inside a connector. An SMT chain is an ordered sequence of these, each one's output feeding the next.
 - **SQL** — structured query language.
 - **WIP** — work in progress (open, unfinished files).
