@@ -1,6 +1,7 @@
 .claude
 __pycache__/
 *.pyc
+BUILD_NOTES.md
 
 # dbt runtime artifacts (warehouse/dbt/)
 .user.yml
