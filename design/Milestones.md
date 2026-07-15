@@ -187,8 +187,20 @@ milestone's own acceptance criteria.
   - `docker compose restart kafka-connect` (not `make down`) — confirm the connector config is still registered with no re-registration needed (`GET /connectors` still lists it); status briefly reports `UNASSIGNED` for the connector-level state during the worker's post-restart rebalance before settling back to `RUNNING` — noted here rather than silently assumed instantaneous.
 
 **M2.4 — Warehouse PostgreSQL**
-- **Test:** Second, separate PostgreSQL instance provisioned for Raw/Silver/Gold/Mart
-- **Acceptance:** Warehouse instance is reachable and distinct from the ODS instance; confirms FR-2 (CDC adds no load to the write primary)
+- **Test:** A second `warehouse-postgres` service in `docker-compose.yml` — its own container, its own `warehouse_data` volume, its own host port (`WAREHOUSE_POSTGRES_PORT` in `.env`, following the `ODS_`/`WAREHOUSE_` prefix convention anticipated back in D002) — entirely separate from `ods-postgres`. No schema is applied yet; Raw tables arrive with the JDBC sink connector (M2.5) that lands into this instance.
+- **Acceptance:** From a clean checkout, `make up` brings up both `ods-postgres` and `warehouse-postgres` as distinct running containers with distinct container IDs and distinct volumes; `warehouse-postgres` accepts connections (`pg_isready`) on its own port within the same bounded startup window as `ods-postgres`; a row written to the ODS is not visible anywhere in the warehouse instance (proving these are genuinely two databases, not one instance with two schemas) — the concrete, verifiable form of FR-2 ("CDC adds no load to the write primary"), since the write primary and the warehouse now physically cannot share load by construction.
+- **Dependencies:** M0.2 (compose + `.env` + `make up`/`make down` pattern this service follows).
+- **Out-of-scope:**
+  - Any Raw/Silver/Gold/Mart schema in the warehouse — M2.5 (JDBC sink lands Raw) and M3 (dbt builds Silver/Gold/Mart) apply schema, respectively.
+  - The `warehouse/` folder (Technical-Design.md §9) — left `planned`; this milestone's entire config is expressible via `docker-compose.yml`/`.env`, same reasoning as M2.2's `streaming/`. `warehouse/` is more likely first needed by M3's dbt project.
+  - Cross-instance replication, backup, or HA — a single warehouse instance, matching the ODS's own scope.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_warehouse_postgres.sh` — brings the stack up, asserts `ods-postgres` and `warehouse-postgres` are running as two distinct containers (different container IDs) with two distinct volumes; waits for `warehouse-postgres` readiness the same way `test_compose_up.sh` does for the ODS; inserts a row into the ODS and confirms the warehouse instance has no table by that name to even query (proving isolation, not just "a query against it returned 0 rows" which could also be true of an empty table in the same instance).
+- **Manual Test Plan:**
+  - `make up`, `docker compose ps` — confirm both `ods-postgres` and `warehouse-postgres` listed as separate containers.
+  - `docker volume ls` — confirm `ods_data` and `warehouse_data` are separate volumes.
+  - `psql` into the warehouse instance directly (its own host port) — confirm it accepts connections and has no ODS tables.
+  - `make down`, confirm both volumes are removed.
 
 **M2.5 — JDBC sink connector**
 - **Test:** Kafka Connect JDBC sink connector lands topic messages into Raw tables in the warehouse
