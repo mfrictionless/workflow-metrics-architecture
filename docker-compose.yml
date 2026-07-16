@@ -5,7 +5,7 @@
 
 services:
   ods-postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     # wal_level=logical enables CDC (M2.1) -- a postmaster-context setting,
     # only applied at server start, so it's passed as a command-line
     # override rather than set via SQL. max_wal_senders/max_replication_slots
@@ -19,7 +19,7 @@ services:
     ports:
       - "${ODS_POSTGRES_PORT}:5432"
     volumes:
-      - ods_data:/var/lib/postgresql/data
+      - ods_data:/var/lib/postgresql
       - ./ods/ddl:/docker-entrypoint-initdb.d:ro
 
   # Single-node Kafka broker, KRaft mode (no Zookeeper) -- combined
@@ -55,7 +55,7 @@ services:
   # primary (FR-2). No schema applied yet; the JDBC sink connector (M2.5)
   # lands Raw tables here. See design/Milestones.md M2.4.
   warehouse-postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${WAREHOUSE_POSTGRES_DB}
       POSTGRES_USER: ${WAREHOUSE_POSTGRES_USER}
@@ -63,7 +63,7 @@ services:
     ports:
       - "${WAREHOUSE_POSTGRES_PORT}:5432"
     volumes:
-      - warehouse_data:/var/lib/postgresql/data
+      - warehouse_data:/var/lib/postgresql
       - ./warehouse/ddl:/docker-entrypoint-initdb.d:ro
 
   # Kafka Connect worker (Debezium Postgres connector plugin pre-installed) --
