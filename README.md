@@ -34,7 +34,7 @@ For the top-level component/folder layout of the monorepo, see [Technical-Design
 | [README.md](README.md) | This file: project overview and repository map |
 
 
-## 10. Definitions
+## Definitions
 
 - **AMOD** — a title and closing technology company; the system owner in this working example.
 - **ALTA** — American Land Title Association; title-industry data standards.
