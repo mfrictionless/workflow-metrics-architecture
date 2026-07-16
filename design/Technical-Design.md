@@ -110,11 +110,25 @@ file_actions (
   live_flag         boolean,
 )
 
+persons (
+  person_id         bigint PK,
+  display_name      varchar,
+  email             varchar,        -- borrower, loan_officer,
+  ssn_last4         VARCHAR
+)
+
 parties (
   party_id          bigint PK,
   file_id           bigint FK,
   role              varchar,        -- borrower, loan_officer, loan_processor, …
-  user_id           bigint,         -- Autoclose user, if applicable
+  person_id         bigint FK,         
+)
+
+users (
+  user_id           bigint PK,
+  person_id         bigint FK,
+  team_name         varchar,
+  is_external_vendor_flg boolean
 )
 
 audit_events (

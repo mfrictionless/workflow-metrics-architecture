@@ -15,11 +15,23 @@ EXPECTED_ROLES = {
     "RECORDING": ("TITLE_AGENT", None),
 }
 
+ROLES = ["BORROWER", "LOAN_OFFICER", "LOAN_PROCESSOR", "TITLE_AGENT", "NOTARY", "COUNTY_RECORDER"]
+
+
+def make_role_ids(offset=0):
+    """A fixture role_ids map, mirroring what simulate.py resolves from the DB
+    (a unique person_id/user_id pair per role) before calling build_file."""
+    return {
+        role: {"person_id": offset + i * 2, "user_id": offset + i * 2 + 1}
+        for i, role in enumerate(ROLES)
+    }
+
 
 class BuildFileTests(unittest.TestCase):
     def setUp(self):
         self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.timezone.utc)
-        self.result = build_file("SIM-0001", self.base_ts)
+        self.role_ids = make_role_ids()
+        self.result = build_file("SIM-0001", self.base_ts, self.role_ids)
 
     def test_file_is_closed(self):
         self.assertEqual(self.result["file"]["status"], "CLOSED")
@@ -41,24 +53,25 @@ class BuildFileTests(unittest.TestCase):
         self.assertIsNone(recording["received_user_id"])
 
     def test_sender_receiver_roles_match_workflow_reference(self):
-        parties_by_user_id = {p["user_id"]: p["role"] for p in self.result["parties"]}
+        role_by_user_id = {ids["user_id"]: role for role, ids in self.role_ids.items()}
         for action in self.result["file_actions"]:
             expected_sender, expected_receiver = EXPECTED_ROLES[action["action_code"]]
-            self.assertEqual(parties_by_user_id[action["sent_user_id"]], expected_sender, action["action_code"])
+            self.assertEqual(role_by_user_id[action["sent_user_id"]], expected_sender, action["action_code"])
             if expected_receiver is not None:
                 self.assertEqual(
-                    parties_by_user_id[action["received_user_id"]], expected_receiver, action["action_code"]
+                    role_by_user_id[action["received_user_id"]], expected_receiver, action["action_code"]
                 )
+
+    def test_parties_use_role_ids_person_id(self):
+        for party in self.result["parties"]:
+            self.assertEqual(party["person_id"], self.role_ids[party["role"]]["person_id"])
 
     def test_six_parties(self):
         self.assertEqual(len(self.result["parties"]), 6)
 
-    def test_unique_file_number_and_user_ids_across_invocations(self):
-        other = build_file("SIM-0002", self.base_ts)
+    def test_unique_file_number_across_invocations(self):
+        other = build_file("SIM-0002", self.base_ts, self.role_ids)
         self.assertNotEqual(self.result["file"]["file_number"], other["file"]["file_number"])
-        ids_a = {p["user_id"] for p in self.result["parties"]}
-        ids_b = {p["user_id"] for p in other["parties"]}
-        self.assertEqual(ids_a & ids_b, set(), "party user_ids must not collide across files")
 
 
 class OpenStateTests(unittest.TestCase):
@@ -67,7 +80,7 @@ class OpenStateTests(unittest.TestCase):
 
     def setUp(self):
         self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.timezone.utc)
-        self.closed = build_file("SIM-0001", self.base_ts)
+        self.closed = build_file("SIM-0001", self.base_ts, make_role_ids())
         self.open = open_state(self.closed)
 
     def test_file_is_wip_and_not_closed(self):

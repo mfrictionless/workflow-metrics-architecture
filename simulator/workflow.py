@@ -4,12 +4,17 @@ deliberately free of any psycopg2 import so it can be unit-tested without a
 database or pip install. See design/Milestones.md M1.2/M1.3 and the RACI
 assignments in design/Home-Refinance-Workflow.md (steps 1, 3, 9, 12).
 
+person_id/user_id per role are DB-assigned identities (persons/users tables,
+M1.1.1), so this module takes them as input (`role_ids`) rather than
+fabricating them -- simulate.py resolves each role to a real person_id/
+user_id (a unique borrower per file, a shared pool for the other roles)
+before calling build_file.
+
 simulate.py (DB-writing) is the only module that imports psycopg2.
 """
 import datetime
-import itertools
 
-# Roles, in a fixed order, so user_id assignment is deterministic per file.
+# Roles, in a fixed order.
 ROLES = ["BORROWER", "LOAN_OFFICER", "LOAN_PROCESSOR", "TITLE_AGENT", "NOTARY", "COUNTY_RECORDER"]
 
 # Sender/receiver role per step, keyed by action_code. RECORDING has no
@@ -32,19 +37,19 @@ STEP_OFFSETS_DAYS = {
     "RECORDING": (1, 0),
 }
 
-_user_id_counter = itertools.count(100001)
 
-
-def build_file(file_number, base_ts):
+def build_file(file_number, base_ts, role_ids):
     """Build one closed file's rows: a `files` row, 6 `parties` rows (one per
     role), and 4 `file_actions` rows for the truncated workflow. Returns a
     dict with keys "file", "parties", "file_actions" -- plain dicts, ready
-    for a DB layer to insert. Deterministic given (file_number, base_ts),
-    except for user_id assignment, which is unique per call.
-    """
-    user_id_by_role = {role: next(_user_id_counter) for role in ROLES}
+    for a DB layer to insert. Deterministic given (file_number, base_ts,
+    role_ids).
 
-    parties = [{"role": role, "user_id": user_id_by_role[role]} for role in ROLES]
+    `role_ids` maps each role in ROLES to {"person_id": ..., "user_id": ...}
+    -- real DB identities resolved by simulate.py (a unique borrower per
+    file, a shared pool for the other roles).
+    """
+    parties = [{"role": role, "person_id": role_ids[role]["person_id"]} for role in ROLES]
 
     file_actions = []
     for action_code in ACTION_SEQUENCE:
@@ -56,8 +61,8 @@ def build_file(file_number, base_ts):
                 "action_type": "COMPLETE",
                 "sent_at": base_ts - datetime.timedelta(days=sent_offset_days),
                 "received_at": base_ts - datetime.timedelta(days=received_offset_days),
-                "sent_user_id": user_id_by_role[sender_role],
-                "received_user_id": user_id_by_role[receiver_role] if receiver_role else None,
+                "sent_user_id": role_ids[sender_role]["user_id"],
+                "received_user_id": role_ids[receiver_role]["user_id"] if receiver_role else None,
             }
         )
 

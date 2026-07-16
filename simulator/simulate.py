@@ -9,7 +9,22 @@ import uuid
 
 import psycopg2
 
-from workflow import build_file, open_state
+from workflow import ROLES, build_file, open_state
+
+# All roles except BORROWER draw from a shared, reusable pool -- these are
+# internal/vendor staff who plausibly handle many files. BORROWER is the
+# file's customer, so it always gets a fresh person/user (see insert_borrower).
+POOL_ROLES = [role for role in ROLES if role != "BORROWER"]
+
+# (team_name, is_external_vendor_flag) per pooled role, matching
+# ods/seed/seed.sql's fixed example.
+ROLE_TEAM = {
+    "LOAN_OFFICER": ("Acme Bank Loan Ops", False),
+    "LOAN_PROCESSOR": ("Acme Bank Loan Ops", False),
+    "TITLE_AGENT": ("Acme Title", True),
+    "NOTARY": ("Acme Title", True),
+    "COUNTY_RECORDER": ("Los Angeles County Recorder", True),
+}
 
 
 def db_connection():
@@ -20,6 +35,78 @@ def db_connection():
         user=os.environ["ODS_POSTGRES_USER"],
         password=os.environ["ODS_POSTGRES_PASSWORD"],
     )
+
+
+def ensure_pool(conn, pool_size):
+    """Idempotently ensures `pool_size` persons+users exist per pooled role
+    (every role except BORROWER). Safe to call every run -- looks up each
+    pool member by its deterministic email before inserting. Returns
+    {role: [(person_id, user_id), ...]}.
+    """
+    pool = {role: [] for role in POOL_ROLES}
+    with conn.cursor() as cur:
+        for role in POOL_ROLES:
+            team_name, is_external_vendor_flag = ROLE_TEAM[role]
+            for n in range(1, pool_size + 1):
+                email = f"{role.lower()}.pool{n}@example.com"
+                cur.execute("SELECT person_id FROM persons WHERE email = %s", (email,))
+                row = cur.fetchone()
+                if row:
+                    person_id = row[0]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO persons (display_name, email, ssn_last4)
+                        VALUES (%s, %s, %s)
+                        RETURNING person_id
+                        """,
+                        (f"{role.replace('_', ' ').title()} Pool {n}", email, "0000"),
+                    )
+                    person_id = cur.fetchone()[0]
+
+                cur.execute("SELECT user_id FROM users WHERE person_id = %s", (person_id,))
+                row = cur.fetchone()
+                if row:
+                    user_id = row[0]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO users (person_id, team_name, is_external_vendor_flag)
+                        VALUES (%s, %s, %s)
+                        RETURNING user_id
+                        """,
+                        (person_id, team_name, is_external_vendor_flag),
+                    )
+                    user_id = cur.fetchone()[0]
+                pool[role].append((person_id, user_id))
+    conn.commit()
+    return pool
+
+
+def insert_borrower(conn, file_number):
+    """Inserts a fresh person + user for the file's borrower (the customer --
+    never pooled/reused across files)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO persons (display_name, email, ssn_last4)
+            VALUES (%s, %s, %s)
+            RETURNING person_id
+            """,
+            (f"Borrower {file_number}", f"borrower.{file_number}@example.com", "0000"),
+        )
+        person_id = cur.fetchone()[0]
+        cur.execute(
+            """
+            INSERT INTO users (person_id, team_name, is_external_vendor_flag)
+            VALUES (%s, NULL, false)
+            RETURNING user_id
+            """,
+            (person_id,),
+        )
+        user_id = cur.fetchone()[0]
+    conn.commit()
+    return person_id, user_id
 
 
 def insert_file(conn, file_data):
@@ -48,8 +135,8 @@ def insert_file(conn, file_data):
 
         for party in initial["parties"]:
             cur.execute(
-                "INSERT INTO parties (file_id, role, user_id) VALUES (%s, %s, %s)",
-                (file_id, party["role"], party["user_id"]),
+                "INSERT INTO parties (file_id, role, person_id) VALUES (%s, %s, %s)",
+                (file_id, party["role"], party["person_id"]),
             )
 
         action_ids = []
@@ -86,15 +173,24 @@ def insert_file(conn, file_data):
 
 def main():
     count = int(os.environ.get("COUNT", "1"))
+    pool_size = int(os.environ.get("POOL_SIZE_PER_ROLE", "3"))
     conn = db_connection()
     try:
+        pool = ensure_pool(conn, pool_size)
         for _ in range(count):
             file_number = f"SIM-{uuid.uuid4().hex[:12]}"
             # Jitter each file's base timestamp so runs aren't identical.
             base_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
                 days=random.uniform(0, 30)
             )
-            file_data = build_file(file_number, base_ts)
+
+            borrower_person_id, borrower_user_id = insert_borrower(conn, file_number)
+            role_ids = {"BORROWER": {"person_id": borrower_person_id, "user_id": borrower_user_id}}
+            for role in POOL_ROLES:
+                person_id, user_id = random.choice(pool[role])
+                role_ids[role] = {"person_id": person_id, "user_id": user_id}
+
+            file_data = build_file(file_number, base_ts, role_ids)
             file_id = insert_file(conn, file_data)
             print(f"inserted file_id={file_id} file_number={file_number}")
     finally:

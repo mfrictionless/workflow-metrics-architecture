@@ -100,7 +100,7 @@ milestone's own acceptance criteria.
   - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
 
 **M1.1.1 - ODS schema mounted, executed, and validated via compose (AMENDMENT to M1.1)**
-- **Amendment Note:** This is an amendment to Milestone 1.1 to add users, persons, user_party, and modify party table along with realted constraints and should be used in place of Milestone M1.1.
+- **Amendment:** This is an amendment to Milestone 1.1 to add users, persons, user_party, and modify party table along with realted constraints and should be used in place of Milestone M1.1.
 - **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `001_schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events`, `users`, and `persons` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
 - **Acceptance:** From a clean checkout, `make up` brings the ODS up with no manual `psql -f` step, and: all 7 tables exist (`information_schema.tables`); FK constraints from `file_actions`/`parties`/`audit_events` to `files` are present; FK contraints from `file_actions` to `users` are present.  FK constrainnts between `user` and `persons` exist.  FK constraints between `parties` and `persons` exist. CHECK constraints on the 4 enumerated columns exist and only accept ALL CAPS values (a lowercase insert, e.g. `role = 'borrower'`, is rejected); every column across all 4 tables has a non-empty `COMMENT`. Restarting the container without `make down` (volume persists) does not re-run or error on the init script, per Postgres's own init-once behavior.
 - **Dependencies:** M0.2 (compose file + `.env` + `make up`/`make down`).
@@ -134,6 +134,7 @@ milestone's own acceptance criteria.
   - Run `make seed` again and observe a second file inserted — confirms it's additive/explicit, matching the documented out-of-scope behavior.
 
 **M1.2.1 — Seed data (truncated workflow - AMENDMENT to M1.2)**
+- **Amandment:** - the SEED data needs to be updated to to reflect the data model changes
 - **Test:** `make seed` — a separate, explicit command — applies `ods/seed/seed.sql` against the running ODS (piped into `psql` via `docker compose exec`), inserting one closed file's truncated 4-step workflow (Apply → Process → Sign → Record and close), with `party` and `user` rows for every role involved and RACI-correct sender/receiver per steps 1, 3, 9, 12 in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md). Kept out of `ods/ddl/` (not mounted into `docker-entrypoint-initdb.d`) so `make up` alone brings up an **empty** ODS — seed data is never automatically mixed into whatever the simulator (M1.3+) generates.
 - **Acceptance:** From a clean checkout, `make up` brings up an ODS with 0 files. Running `make seed` afterward results in exactly 1 file (`status='CLOSED'`) with its 4 `file_actions` rows, each `sent_at < received_at`, sender/receiver user is mapped to users; `files.closed_at` equals the `RECORDING` step's `received_at`, and that step's `received_user_id` is the Autoclose System User (A5).
 - **Dependencies:** M1.1 (schema + `make up` bringing up a clean, empty ODS).
@@ -165,7 +166,6 @@ milestone's own acceptance criteria.
   - `make up`, then `make simulate` — confirm 5 new closed files (the `.env` default).
   - `make simulate COUNT=2` — confirm 2 more files, 7 total.
   - Inspect one file's rows directly; confirm roles and timestamps are sane.
-
 
 
 ### M2: CDC and raw landing
