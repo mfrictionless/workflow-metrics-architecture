@@ -137,5 +137,5 @@ Responsible, Accountable, Consulted, and Informed:
 **A5 — The terminal step closes automatically.** Step 12 has no human Receiver. Once
 its Accountable party (`title_agent`) submits confirmation that the security instrument
 is recorded, **Autoclose itself acknowledges receipt** — closing both the step and the
-file without further human action. `files.closed_at` is set to that `received_at`. (This
-implies a system service principal stands in for `received_user_id`;.)
+file without further human action. `files.closed_at` is set to that `received_at`. The
+Autoclose System service principal stands in for `received_user_id`;.)

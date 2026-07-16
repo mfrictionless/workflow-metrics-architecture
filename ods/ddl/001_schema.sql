@@ -21,6 +21,32 @@ COMMENT ON COLUMN files.closed_at IS 'Timestamp the file closed. Set automatical
 COMMENT ON COLUMN files.county_fips IS 'FIPS code of the county where the property is located.';
 COMMENT ON COLUMN files.product_type IS 'Loan product type, e.g. REFINANCE or PURCHASE. This working example seeds REFINANCE only.';
 
+CREATE TABLE persons (
+    person_id     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    display_name  varchar NOT NULL,
+    email         varchar NOT NULL UNIQUE,
+    ssn_last4    varchar(4) NOT NULL
+);
+
+COMMENT ON TABLE persons IS 'One row per person in the system. This table is used to store information about individuals involved in the workflow, such as borrowers, loan officers, and other parties and segragates personally identifable information.';
+COMMENT ON COLUMN persons.person_id IS 'Surrogate primary key.';
+COMMENT ON COLUMN persons.display_name IS 'Display name of the person.';
+COMMENT ON COLUMN persons.email IS 'Email address of the person.';
+COMMENT ON COLUMN persons.ssn_last4 IS 'Last four digits of the person''s Social Security Number.';
+
+CREATE TABLE users (
+    user_id      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    person_id   bigint NOT NULL REFERENCES persons (person_id),
+    team_name     varchar NULL DEFAULT NULL,
+    is_external_vendor_flag boolean NOT NULL DEFAULT false
+);
+
+COMMENT ON TABLE users IS 'One row per user of Autoclose. Both internal or external users exists in this table.  The user team is recorded here.';
+COMMENT ON COLUMN users.user_id IS 'Surrogate primary key.';
+COMMENT ON COLUMN users.person_id IS 'Foreign key to the persons table, which stores personally identifiable information.';
+COMMENT ON COLUMN users.team_name IS 'Name of the user''s team, e.g. "Acme Title" or "Acme Bank Loan Ops".';
+COMMENT ON COLUMN users.is_external_vendor_flag IS 'True if the user is an external vendor (e.g. title agent, not an internal Autoclose employee).';
+
 CREATE TABLE file_actions (
     file_action_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     file_id           bigint NOT NULL REFERENCES files (file_id),
@@ -33,8 +59,8 @@ CREATE TABLE file_actions (
     action_type       varchar NOT NULL CHECK (action_type IN ('START', 'COMPLETE')),
     sent_at           timestamptz,
     received_at       timestamptz,
-    sent_user_id      bigint,
-    received_user_id  bigint,
+    sent_user_id      bigint REFERENCES users (user_id),
+    received_user_id  bigint REFERENCES users (user_id),
     live_flag         boolean NOT NULL DEFAULT true
 );
 
@@ -54,26 +80,29 @@ COMMENT ON COLUMN file_actions.live_flag IS 'Marks the current/authoritative row
 CREATE TABLE parties (
     party_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     file_id   bigint NOT NULL REFERENCES files (file_id),
+    person_id bigint REFERENCES persons (person_id),
     role      varchar NOT NULL CHECK (role IN (
                   'BORROWER', 'LOAN_OFFICER', 'LOAN_PROCESSOR', 'UNDERWRITER',
                   'APPRAISER', 'TITLE_AGENT', 'NOTARY', 'COUNTY_RECORDER'
-              )),
-    user_id   bigint
+              ))
 );
 
 CREATE INDEX idx_parties_file_id ON parties (file_id);
 
-COMMENT ON TABLE parties IS 'One row per party-role assignment on a file. A user may hold multiple roles across files. Roles are defined in design/Home-Refinance-Workflow.md.';
+COMMENT ON TABLE parties IS 'One row per party-role assignment on a file. A person may hold multiple roles across files. Roles are defined in design/Home-Refinance-Workflow.md.';
 COMMENT ON COLUMN parties.party_id IS 'Surrogate primary key.';
+COMMENT ON COLUMN parties.person_id IS 'Foreign key to the persons table, which stores personally identifiable information.';
 COMMENT ON COLUMN parties.file_id IS 'File this party assignment applies to.';
 COMMENT ON COLUMN parties.role IS 'Party role on the file, per the RACI table in design/Home-Refinance-Workflow.md.';
-COMMENT ON COLUMN parties.user_id IS 'Autoclose user holding this role, if the role is filled by a system user (e.g. not an external COUNTY_RECORDER).';
 
 CREATE TABLE audit_events (
     audit_event_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     file_id         bigint NOT NULL REFERENCES files (file_id),
-    user_id         bigint,
-    event_type      varchar NOT NULL,
+    user_id         bigint REFERENCES users (user_id),
+    event_type      varchar NOT NULL CHECK (event_type IN (
+                      'NOTE_ADDED', 'DOCUMENT_UPLOADED', 'SIGNATURE_CAPTURED',
+                      'SIGNATURE_REJECTED', 'SIGNATURE_APPROVED'
+                  )),
     description     text,
     created_at      timestamptz NOT NULL DEFAULT now()
 );

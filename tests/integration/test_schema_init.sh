@@ -1,5 +1,5 @@
 #!/bin/sh
-# M1.1 regression check: the ODS schema mounts into Postgres's auto-init
+# M1.1.1 (amended M1.1) regression check: the ODS schema mounts into Postgres's auto-init
 # mechanism via docker-compose.yml and actually executes on `make up` --
 # tables, foreign keys, ALL CAPS enum CHECK constraints, and per-column
 # comments all present, with no manual `psql -f` step.
@@ -48,7 +48,7 @@ docker compose exec -T ods-postgres test -f /docker-entrypoint-initdb.d/001_sche
   || err "/docker-entrypoint-initdb.d/001_schema.sql not found in the container -- mount not wired"
 
 # 2. All 4 tables exist.
-for t in files file_actions parties audit_events; do
+for t in files file_actions parties audit_events users; do
   count=$(psql_c "SELECT count(*) FROM information_schema.tables WHERE table_name='$t';" | tr -d '[:space:]')
   [ "$count" = "1" ] || err "table '$t' does not exist"
 done
@@ -58,6 +58,25 @@ for t in file_actions parties audit_events; do
   count=$(psql_c "SELECT count(*) FROM information_schema.table_constraints WHERE table_name='$t' AND constraint_type='FOREIGN KEY';" | tr -d '[:space:]')
   [ "$count" -ge "1" ] 2>/dev/null || err "table '$t' has no foreign key constraint"
 done
+
+# 4. Foreign keys from file_actions are present.
+for t in file_actions; do
+  count=$(psql_c "SELECT count(*) FROM information_schema.table_constraints WHERE table_name='$t' AND constraint_type='FOREIGN KEY';" | tr -d '[:space:]')
+  [ "$count" -ge "3" ] 2>/dev/null || err "table '$t' has no foreign key constraint"
+done
+
+# 5. Foreign keys from parties are present.
+for t in parties; do
+  count=$(psql_c "SELECT count(*) FROM information_schema.table_constraints WHERE table_name='$t' AND constraint_type='FOREIGN KEY';" | tr -d '[:space:]')
+  [ "$count" -ge "1" ] 2>/dev/null || err "table '$t' has no foreign key constraint"
+done
+
+# 5. Foreign keys from users are present.
+for t in users; do
+  count=$(psql_c "SELECT count(*) FROM information_schema.table_constraints WHERE table_name='$t' AND constraint_type='FOREIGN KEY';" | tr -d '[:space:]')
+  [ "$count" -ge "1" ] 2>/dev/null || err "table '$t' has no foreign key constraint"
+done
+
 
 # 4. Enum CHECK constraints only accept ALL CAPS values -- a lowercase insert
 # on each enumerated column must be rejected *specifically by that column's
@@ -91,7 +110,7 @@ if [ -n "$file_id" ]; then
 fi
 
 # 5. Every column of every table has a non-empty comment.
-for t in files file_actions parties audit_events; do
+for t in files file_actions parties audit_events users; do
   total=$(psql_c "SELECT count(*) FROM information_schema.columns WHERE table_name='$t';" | tr -d '[:space:]')
   commented=$(psql_c "
     SELECT count(*) FROM information_schema.columns c

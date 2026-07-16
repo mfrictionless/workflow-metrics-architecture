@@ -67,8 +67,8 @@ bad=$(psql_c "SELECT count(*) FROM file_actions WHERE NOT (sent_at < received_at
 check_sender() {
   action_code="$1"; expected="$2"
   actual=$(psql_c "
-    SELECT p.role FROM file_actions fa
-    JOIN parties p ON p.user_id = fa.sent_user_id AND p.file_id = fa.file_id
+    SELECT par.role
+    FROM file_actions fa INNER JOIN users su ON su.user_id = fa.sent_user_id INNER JOIN parties par ON par.person_id = su.person_id AND par.file_id = fa.file_id
     WHERE fa.action_code = '$action_code';" | tr -d '[:space:]')
   [ "$actual" = "$expected" ] || err "$action_code sender expected '$expected', got '$actual'"
 }
@@ -76,8 +76,8 @@ check_sender() {
 check_receiver() {
   action_code="$1"; expected="$2"
   actual=$(psql_c "
-    SELECT p.role FROM file_actions fa
-    JOIN parties p ON p.user_id = fa.received_user_id AND p.file_id = fa.file_id
+    SELECT par.role
+    FROM file_actions fa INNER JOIN parties par ON par.file_id = fa.file_id INNER JOIN users ru ON ru.person_id = par.person_id AND ru.user_id = fa.received_user_id
     WHERE fa.action_code = '$action_code';" | tr -d '[:space:]')
   [ "$actual" = "$expected" ] || err "$action_code receiver expected '$expected', got '$actual'"
 }
@@ -90,9 +90,17 @@ check_sender "SIGNING" "BORROWER"
 check_receiver "SIGNING" "TITLE_AGENT"
 check_sender "RECORDING" "TITLE_AGENT"
 
-# 7. RECORDING's received_user_id is NULL (Requirements.md A5).
-recv=$(psql_c "SELECT received_user_id FROM file_actions WHERE action_code='RECORDING';" | tr -d '[:space:]')
-[ -z "$recv" ] || err "RECORDING.received_user_id expected NULL, got '$recv'"
+# 7. RECORDING's person is the Autoclose System user.
+recv=$(psql_c "
+  SELECT p.display_name
+  FROM file_actions fa
+  INNER JOIN users u ON (
+    u.user_id = fa.received_user_id)
+  INNER JOIN persons p ON (
+    p.person_id = u.person_id)
+  WHERE
+    action_code='RECORDING';")
+[ "$recv" = "Autoclose System" ] || err "RECORDING.person_display_name expected 'Autoclose System', got '$recv'"
 
 # 8. files.closed_at equals the RECORDING row's received_at.
 closed_at=$(psql_c "SELECT closed_at FROM files LIMIT 1;")

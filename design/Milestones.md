@@ -83,7 +83,7 @@ milestone's own acceptance criteria.
 
 ### M1: Source ODS and seed data (COMPLETE)
 
-**M1.1 — ODS schema mounted, executed, and validated via compose**
+**M1.1 — ODS schema mounted, executed, and validated via compose (AMENDED See M1.1.1)**
 - **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `001_schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
 - **Acceptance:** From a clean checkout, `make up` brings the ODS up with no manual `psql -f` step, and: all 4 tables exist (`information_schema.tables`); FK constraints from `file_actions`/`parties`/`audit_events` to `files` are present; CHECK constraints on the 4 enumerated columns exist and only accept ALL CAPS values (a lowercase insert, e.g. `role = 'borrower'`, is rejected); every column across all 4 tables has a non-empty `COMMENT`. Restarting the container without `make down` (volume persists) does not re-run or error on the init script, per Postgres's own init-once behavior.
 - **Dependencies:** M0.2 (compose file + `.env` + `make up`/`make down`).
@@ -99,7 +99,25 @@ milestone's own acceptance criteria.
   - Attempt inserting a lowercase enum value (e.g. `role = 'borrower'`) and confirm rejection.
   - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
 
-**M1.2 — Seed data (truncated workflow)**
+**M1.1.1 - ODS schema mounted, executed, and validated via compose (AMENDMENT to M1.1)**
+- **Amendment Note:** This is an amendment to Milestone 1.1 to add users, persons, user_party, and modify party table along with realted constraints and should be used in place of Milestone M1.1.
+- **Test:** `make up` launches the `ods-postgres` service from `docker-compose.yml`; `ods/ddl/` is mounted into Postgres's `/docker-entrypoint-initdb.d/` directory (the official image's auto-init mechanism — any `.sql`/`.sh` there runs once, in alphabetical order, only when the data directory is empty); Postgres executes the mounted `001_schema.sql` on first startup, creating `files`, `file_actions`, `parties`, `audit_events`, `users`, and `persons` with all foreign keys and CHECK constraints intact (enumerated columns — `status`, `action_code`, `action_type`, `role` — using ALL CAPS values), and every column carrying a `COMMENT`.
+- **Acceptance:** From a clean checkout, `make up` brings the ODS up with no manual `psql -f` step, and: all 7 tables exist (`information_schema.tables`); FK constraints from `file_actions`/`parties`/`audit_events` to `files` are present; FK contraints from `file_actions` to `users` are present.  FK constrainnts between `user` and `persons` exist.  FK constraints between `parties` and `persons` exist. CHECK constraints on the 4 enumerated columns exist and only accept ALL CAPS values (a lowercase insert, e.g. `role = 'borrower'`, is rejected); every column across all 4 tables has a non-empty `COMMENT`. Restarting the container without `make down` (volume persists) does not re-run or error on the init script, per Postgres's own init-once behavior.
+- **Dependencies:** M0.2 (compose file + `.env` + `make up`/`make down`).
+- **Out-of-scope:**
+  - Seeding data — M1.2.
+  - Schema migrations/versioning beyond this single `001_schema.sql`.
+  - Any behavior when the data directory is *not* empty (e.g. changing `001_schema.sql` after a volume already exists) — Postgres's init-once semantics mean that's a `make down -v`-and-recreate case.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_schema_init.sh` — brings the stack up via `scripts/compose_up.sh`, waits for readiness, then: (a) confirms `/docker-entrypoint-initdb.d/001_schema.sql` exists in the container (the mount is wired correctly); (b) queries `information_schema.tables` for all 7 tables; (c) queries `information_schema.table_constraints`/`pg_constraint` for the expected FKs; (d) attempts a lowercase enum insert on each of the 4 enumerated columns and asserts each is rejected (regression-testing the ALL CAPS fix made during the original schema build, now automated instead of manual); (e) queries `pg_description` and asserts every column of all 5 tables has a non-empty comment, not just a couple of spot-checked ones. Tears down after.
+- **Manual Test Plan:**
+  - `make up` from a clean checkout, `docker compose exec ods-postgres ls /docker-entrypoint-initdb.d/` — confirm `001_schema.sql` listed.
+  - `psql`/`\d+ <table>` in, confirm all 7 tables, their constraints, and column comments are present.
+  - Attempt inserting a lowercase enum value (e.g. `role = 'borrower'`) and confirm rejection.
+  - Restart the container (`docker compose restart ods-postgres`, not `make down`) and confirm no errors — the init script correctly does not re-run against the existing volume.
+
+
+**M1.2 — Seed data (truncated workflow - AMENDED See M1.2.1)**
 - **Test:** `make seed` — a separate, explicit command — applies `ods/seed/seed.sql` against the running ODS (piped into `psql` via `docker compose exec`), inserting one closed file's truncated 4-step workflow (Apply → Process → Sign → Record and close), with `parties` rows for every role involved and RACI-correct sender/receiver per steps 1, 3, 9, 12 in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md). Kept out of `ods/ddl/` (not mounted into `docker-entrypoint-initdb.d`) so `make up` alone brings up an **empty** ODS — seed data is never automatically mixed into whatever the simulator (M1.3+) generates.
 - **Acceptance:** From a clean checkout, `make up` brings up an ODS with 0 files. Running `make seed` afterward results in exactly 1 file (`status='CLOSED'`) with its 4 `file_actions` rows, each `sent_at < received_at`, sender/receiver party roles matching the workflow reference; `files.closed_at` equals the `RECORDING` step's `received_at`, and that step's `received_user_id` is `NULL` (A5).
 - **Dependencies:** M1.1 (schema + `make up` bringing up a clean, empty ODS).
@@ -110,6 +128,22 @@ milestone's own acceptance criteria.
   - **Idempotency of repeated `make seed` calls** — it's an explicit, additive command; running it twice inserts a second file (confirmed in manual testing). Not guarded against now; revisit if that becomes a real workflow problem.
 - **Automated Test Plan:**
   - *Integration:* `tests/integration/test_seed_data.sh` — brings the stack up via `scripts/compose_up.sh`, asserts **0 files** present (proving `make up` alone stays empty); runs `scripts/seed.sh`; then verifies exactly 1 file, 4 `file_actions` rows with expected `action_code`s in order, every row's `sent_at < received_at`, correct sender/receiver roles per step, `RECORDING.received_user_id IS NULL`, and `files.closed_at` matching `RECORDING.received_at` exactly (the seed script captures one `now()` value via `\gset` and reuses it for both, avoiding two separate `now()` calls drifting apart). Tears down after.
+- **Manual Test Plan:**
+  - `make up`, confirm `SELECT count(*) FROM files;` returns 0.
+  - `make seed`, confirm the 1 seeded file and its 4 steps as described.
+  - Run `make seed` again and observe a second file inserted — confirms it's additive/explicit, matching the documented out-of-scope behavior.
+
+**M1.2.1 — Seed data (truncated workflow - AMENDMENT to M1.2)**
+- **Test:** `make seed` — a separate, explicit command — applies `ods/seed/seed.sql` against the running ODS (piped into `psql` via `docker compose exec`), inserting one closed file's truncated 4-step workflow (Apply → Process → Sign → Record and close), with `party` and `user` rows for every role involved and RACI-correct sender/receiver per steps 1, 3, 9, 12 in [Home-Refinance-Workflow.md](Home-Refinance-Workflow.md). Kept out of `ods/ddl/` (not mounted into `docker-entrypoint-initdb.d`) so `make up` alone brings up an **empty** ODS — seed data is never automatically mixed into whatever the simulator (M1.3+) generates.
+- **Acceptance:** From a clean checkout, `make up` brings up an ODS with 0 files. Running `make seed` afterward results in exactly 1 file (`status='CLOSED'`) with its 4 `file_actions` rows, each `sent_at < received_at`, sender/receiver user is mapped to users; `files.closed_at` equals the `RECORDING` step's `received_at`, and that step's `received_user_id` is the Autoclose System User (A5).
+- **Dependencies:** M1.1 (schema + `make up` bringing up a clean, empty ODS).
+- **Out-of-scope:**
+  - The full 12-step workflow — M7.
+  - Ongoing/continuous data generation — M1.3.
+  - Seeding more than one file per invocation.
+  - **Idempotency of repeated `make seed` calls** — it's an explicit, additive command; running it twice inserts a second file (confirmed in manual testing). Not guarded against now; revisit if that becomes a real workflow problem.
+- **Automated Test Plan:**
+  - *Integration:* `tests/integration/test_seed_data.sh` — brings the stack up via `scripts/compose_up.sh`, asserts **0 files** present (proving `make up` alone stays empty); runs `scripts/seed.sh`; then verifies exactly 1 file, 4 `file_actions` rows with expected `action_code`s in order, every row's `sent_at < received_at`, correct sender/receiver roles per step, `RECORDING.received_user_id` equals the Autoclose System User, and `files.closed_at` matching `RECORDING.received_at` exactly (the seed script captures one `now()` value via `\gset` and reuses it for both, avoiding two separate `now()` calls drifting apart). Tears down after.
 - **Manual Test Plan:**
   - `make up`, confirm `SELECT count(*) FROM files;` returns 0.
   - `make seed`, confirm the 1 seeded file and its 4 steps as described.
@@ -131,6 +165,8 @@ milestone's own acceptance criteria.
   - `make up`, then `make simulate` — confirm 5 new closed files (the `.env` default).
   - `make simulate COUNT=2` — confirm 2 more files, 7 total.
   - Inspect one file's rows directly; confirm roles and timestamps are sane.
+
+
 
 ### M2: CDC and raw landing
 
