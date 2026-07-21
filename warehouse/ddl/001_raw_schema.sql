@@ -26,6 +26,28 @@ CREATE TABLE raw_files (
     _sink_ts      timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE raw_persons (
+    person_id     bigint,
+    display_name  varchar,
+    email         varchar,
+    ssn_last4    varchar(4),
+    _cdc_op       varchar,
+    _cdc_ts       bigint,
+    _sink_ts      timestamptz NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE raw_users (
+    user_id      bigint,
+    person_id   bigint,
+    team_name     varchar,
+    is_external_vendor_flag boolean,
+    _cdc_op       varchar,
+    _cdc_ts       bigint,
+    _sink_ts      timestamptz NOT NULL DEFAULT now()
+);
+
+
 CREATE TABLE raw_file_actions (
     file_action_id    bigint,
     file_id           bigint,
@@ -44,8 +66,8 @@ CREATE TABLE raw_file_actions (
 CREATE TABLE raw_parties (
     party_id  bigint,
     file_id   bigint,
+    person_id bigint,
     role      varchar,
-    user_id   bigint,
     _cdc_op   varchar,
     _cdc_ts   bigint,
     _sink_ts  timestamptz NOT NULL DEFAULT now()

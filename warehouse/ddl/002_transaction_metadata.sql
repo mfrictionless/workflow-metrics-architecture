@@ -27,6 +27,12 @@
 ALTER TABLE raw_files ADD COLUMN _cdc_txn_id varchar;
 ALTER TABLE raw_files ADD COLUMN _cdc_source_txn_id bigint;
 
+ALTER TABLE raw_persons ADD COLUMN _cdc_txn_id varchar;
+ALTER TABLE raw_persons ADD COLUMN _cdc_source_txn_id bigint;
+
+ALTER TABLE raw_users ADD COLUMN _cdc_txn_id varchar;
+ALTER TABLE raw_users ADD COLUMN _cdc_source_txn_id bigint;
+
 ALTER TABLE raw_file_actions ADD COLUMN _cdc_txn_id varchar;
 ALTER TABLE raw_file_actions ADD COLUMN _cdc_source_txn_id bigint;
 
