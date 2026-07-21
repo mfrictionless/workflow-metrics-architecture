@@ -81,7 +81,8 @@ check_sender() {
   action_code="$1"; expected="$2"
   bad=$(psql_c "
     SELECT count(*) FROM file_actions fa
-    JOIN parties p ON p.user_id = fa.sent_user_id AND p.file_id = fa.file_id
+    JOIN users u ON u.user_id = fa.sent_user_id
+    JOIN parties p ON p.person_id = u.person_id AND p.file_id = fa.file_id
     WHERE fa.action_code = '$action_code' AND p.role <> '$expected';
   " | tr -d '[:space:]')
   [ "$bad" = "0" ] || err "$bad '$action_code' row(s) have a sender role other than '$expected'"
@@ -91,7 +92,8 @@ check_receiver() {
   action_code="$1"; expected="$2"
   bad=$(psql_c "
     SELECT count(*) FROM file_actions fa
-    JOIN parties p ON p.user_id = fa.received_user_id AND p.file_id = fa.file_id
+    JOIN users u ON u.user_id = fa.received_user_id
+    JOIN parties p ON p.person_id = u.person_id AND p.file_id = fa.file_id
     WHERE fa.action_code = '$action_code' AND p.role <> '$expected';
   " | tr -d '[:space:]')
   [ "$bad" = "0" ] || err "$bad '$action_code' row(s) have a receiver role other than '$expected'"

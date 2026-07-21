@@ -128,7 +128,7 @@ users (
   user_id           bigint PK,
   person_id         bigint FK,
   team_name         varchar,
-  is_external_vendor_flg boolean
+  is_external_vendor_flag boolean
 )
 
 audit_events (
@@ -158,7 +158,7 @@ Mirrors ODS schema; append-only landing for Debezium change events written by th
 
 ### Staging layer (dbt, `stg_` — conformed)
 
-Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`. Materialized as views.
+Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id` / `person_id` / `party_id` / `user_id` / `audit_event_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`. Materialized as views.
 
 ### Intermediate layer (dbt, `int_` — business/dimensional)
 

@@ -66,21 +66,21 @@ psql_ods() {
   docker compose exec -T ods-postgres psql -U "${ODS_POSTGRES_USER:-postgres}" -d "${ODS_POSTGRES_DB:-ods}" -tAc "$1" 2>/dev/null
 }
 
-# Wait for the seeded row to land (async pipeline).
-landed=0
-i=0
-while [ "$i" -lt 30 ]; do
-  count=$(psql_wh "SELECT count(*) FROM raw_files;" | tr -d '[:space:]')
-  [ "$count" = "1" ] && { landed=1; break; }
-  i=$((i + 1))
-  sleep 1
-done
-if [ "$landed" -ne 1 ]; then
-  err "expected 1 row in raw_files within 30s of seeding, found '${count:-0}'"
-fi
+  # Wait for the seeded row to land (async pipeline).
+  landed=0
+  i=0
+  while [ "$i" -lt 30 ]; do
+    count=$(psql_wh "SELECT count(*) FROM raw_files;" | tr -d '[:space:]')
+    [ "$count" = "1" ] && { landed=1; break; }
+    i=$((i + 1))
+    sleep 1
+  done
+  if [ "$landed" -ne 1 ]; then
+    err "expected 1 row in raw_files within 30s of seeding, found '${count:-0}'"
+  fi
 
-# Row counts match ODS for all 3 seeded tables.
-for pair in "files:raw_files" "file_actions:raw_file_actions" "parties:raw_parties"; do
+# Row counts match ODS for all 5 seeded tables.
+for pair in "files:raw_files" "file_actions:raw_file_actions" "users:raw_users" "persons:raw_persons" "parties:raw_parties"; do
   ods_table=${pair%%:*}
   raw_table=${pair##*:}
   ods_count=$(psql_ods "SELECT count(*) FROM ${ods_table};" | tr -d '[:space:]')
