@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_users
+    description: One current row per user_id, deduplicated from raw_users by _cdc_ts.
+    columns:
+      - name: user_id
+        tests:
+          - unique
+          - not_null

@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_audit_events
+    description: One current row per audit_event_id, deduplicated from raw_audit_events by _cdc_ts.
+    columns:
+      - name: audit_event_id
+        tests:
+          - unique
+          - not_null

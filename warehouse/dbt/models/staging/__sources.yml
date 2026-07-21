@@ -13,6 +13,10 @@ sources:
         identifier: raw_files
       - name: file_actions
         identifier: raw_file_actions
+      - name: persons
+        identifier: raw_persons
+      - name: users
+        identifier: raw_users
       - name: parties
         identifier: raw_parties
       - name: audit_events

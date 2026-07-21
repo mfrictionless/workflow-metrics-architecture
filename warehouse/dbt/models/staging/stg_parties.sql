@@ -9,6 +9,6 @@ with deduped as (
 select
     party_id,
     file_id,
-    role,
-    user_id
+    person_id,
+    role
 from deduped
