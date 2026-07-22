@@ -61,5 +61,10 @@ test-integration:
 	@./scripts/run_tests.sh integration
 
 # Lint shell scripts for correctness and common mistakes.
+# Lint SQL files for style and potential issues.
 lint:
-	@shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh
+	@echo "=== Shell Script Linting ===" && \
+	shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh && \
+	echo "" && \
+	echo "=== SQL Linting ===" && \
+	sqlfluff lint ./ods/ddl/ ./ods/seed/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/

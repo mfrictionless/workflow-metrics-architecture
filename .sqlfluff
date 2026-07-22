@@ -1,0 +1,4 @@
+[sqlfluff]
+dialect = postgres
+exclude_patterns = warehouse/dbt/target
+max_line_length = 100
