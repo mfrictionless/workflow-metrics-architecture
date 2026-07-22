@@ -1,7 +1,7 @@
 #!/bin/sh
 # M2.2 regression check: a single-node Kafka broker (KRaft mode, no
 # Zookeeper) starts, accepts admin/client connections, and can create/list
-# topics. These 4 topics are a basic health check, not the final CDC topic
+# topics. These 6 topics are a basic health check, not the final CDC topic
 # topology -- Debezium (M2.3) will create its own topics with its own
 # naming convention. See design/Milestones.md M2.2.
 set -eu
@@ -37,15 +37,15 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-# Create and list the 4 health-check topics.
-for t in files file_actions parties audit_events; do
+# Create and list the 6 health-check topics.
+for t in files persons users file_actions parties audit_events; do
   docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server localhost:9092 --create --topic "$t" --partitions 1 --replication-factor 1 >/dev/null 2>&1 \
     || err "failed to create topic '$t'"
 done
 
 topics=$(docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list)
-for t in files file_actions parties audit_events; do
+for t in files persons users file_actions parties audit_events; do
   printf '%s' "$topics" | grep -qx "$t" || err "topic '$t' not found in topic list"
 done
 

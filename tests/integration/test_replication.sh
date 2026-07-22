@@ -1,6 +1,6 @@
 #!/bin/sh
 # M2.1 regression check: the ODS is configured for logical replication --
-# wal_level=logical, a publication covering all 4 source tables, and a
+# wal_level=logical, a publication covering all 6 source tables, and a
 # pgoutput logical replication slot (dbz_slot) for Debezium (M2.3) to
 # consume later. "Decodable WAL change" is verified via a separate,
 # temporary test_decoding-plugin slot created and dropped within this test,
@@ -46,8 +46,8 @@ fi
 wal_level=$(psql_c "SHOW wal_level;" | tr -d '[:space:]')
 [ "$wal_level" = "logical" ] || err "expected wal_level='logical', got '$wal_level'"
 
-# 2. Publication covers all 4 source tables.
-for t in files file_actions parties audit_events; do
+# 2. Publication covers all 6 source tables.
+for t in files persons users file_actions parties audit_events; do
   count=$(psql_c "SELECT count(*) FROM pg_publication_tables WHERE pubname='dbz_publication' AND tablename='$t';" | tr -d '[:space:]')
   [ "$count" = "1" ] || err "table '$t' is not in publication 'dbz_publication'"
 done
