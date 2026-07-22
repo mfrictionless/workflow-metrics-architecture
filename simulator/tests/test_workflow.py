@@ -4,7 +4,7 @@ logic (no DB, no psycopg2 import). See design/Milestones.md M1.3.
 import datetime
 import unittest
 
-from workflow import build_file, open_state
+from workflow import SYSTEM, build_file, open_state
 
 EXPECTED_ACTION_SEQUENCE = ["APPLICATION_SUBMIT", "LOAN_PROCESS", "SIGNING", "RECORDING"]
 
@@ -12,15 +12,16 @@ EXPECTED_ROLES = {
     "APPLICATION_SUBMIT": ("BORROWER", "LOAN_OFFICER"),
     "LOAN_PROCESS": ("BORROWER", "LOAN_PROCESSOR"),
     "SIGNING": ("BORROWER", "TITLE_AGENT"),
-    "RECORDING": ("TITLE_AGENT", None),
+    "RECORDING": ("TITLE_AGENT", SYSTEM),
 }
 
-ROLES = ["BORROWER", "LOAN_OFFICER", "LOAN_PROCESSOR", "TITLE_AGENT", "NOTARY", "COUNTY_RECORDER"]
+ROLES = ["BORROWER", "LOAN_OFFICER", "LOAN_PROCESSOR", "TITLE_AGENT", "NOTARY", "COUNTY_RECORDER", SYSTEM]
 
 
 def make_role_ids(offset=0):
     """A fixture role_ids map, mirroring what simulate.py resolves from the DB
-    (a unique person_id/user_id pair per role) before calling build_file."""
+    (a unique person_id/user_id pair per role, plus SYSTEM) before calling
+    build_file."""
     return {
         role: {"person_id": offset + i * 2, "user_id": offset + i * 2 + 1}
         for i, role in enumerate(ROLES)
@@ -48,9 +49,9 @@ class BuildFileTests(unittest.TestCase):
         for action in self.result["file_actions"]:
             self.assertLess(action["sent_at"], action["received_at"], action["action_code"])
 
-    def test_terminal_step_has_no_receiver(self):
+    def test_terminal_step_receiver_is_system(self):
         recording = next(a for a in self.result["file_actions"] if a["action_code"] == "RECORDING")
-        self.assertIsNone(recording["received_user_id"])
+        self.assertEqual(recording["received_user_id"], self.role_ids[SYSTEM]["user_id"])
 
     def test_sender_receiver_roles_match_workflow_reference(self):
         role_by_user_id = {ids["user_id"]: role for role, ids in self.role_ids.items()}

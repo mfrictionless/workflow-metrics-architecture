@@ -1,9 +1,9 @@
 #!/bin/sh
-# M2.5 regression check: the Debezium JDBC sink connector lands ods.public.*
+# Regression check: the Debezium JDBC sink connector lands ods.public.*
 # topic messages into pre-defined Raw tables (warehouse/ddl/001_raw_schema.sql)
-# in the warehouse, with _cdc_op/_cdc_ts (stamped by an SMT chain) and
-# _sink_ts (a Postgres-side DEFAULT) populated on every row. See
-# design/Milestones.md M2.5 and design/Decisions.md D011.
+# in the warehouse, with _cdc_op/_cdc_ts/_cdc_source_lsn/_cdc_topic_offset
+# (stamped by an SMT chain) and _sink_ts (a Postgres-side DEFAULT) populated 
+# on every row.
 set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -79,8 +79,8 @@ psql_ods() {
     err "expected 1 row in raw_files within 30s of seeding, found '${count:-0}'"
   fi
 
-# Row counts match ODS for all 5 seeded tables.
-for pair in "files:raw_files" "file_actions:raw_file_actions" "users:raw_users" "persons:raw_persons" "parties:raw_parties"; do
+# Row counts match ODS for all 6 seeded tables.
+for pair in "files:raw_files" "file_actions:raw_file_actions" "users:raw_users" "persons:raw_persons" "parties:raw_parties" "audit_events:raw_audit_events"; do
   ods_table=${pair%%:*}
   raw_table=${pair##*:}
   ods_count=$(psql_ods "SELECT count(*) FROM ${ods_table};" | tr -d '[:space:]')
@@ -88,16 +88,18 @@ for pair in "files:raw_files" "file_actions:raw_file_actions" "users:raw_users" 
   [ "$ods_count" = "$raw_count" ] || err "row count mismatch: ${ods_table}=${ods_count} vs ${raw_table}=${raw_count}"
 done
 
-# Metadata columns populated on every row.
-null_op=$(psql_wh "SELECT count(*) FROM raw_files WHERE _cdc_op IS NULL;" | tr -d '[:space:]')
-[ "$null_op" = "0" ] || err "expected _cdc_op non-null on every raw_files row, found ${null_op} null"
+# Change Data Capture metadata columns populated on every row, on every raw
+# table. _cdc_op/_cdc_ts/_cdc_source_lsn/_cdc_topic_offset are
+# populated by the Debezium/JDBC-sink SMT chain; _sink_ts is a Warehouse
+# Postgres-side DEFAULT.
+for raw_table in raw_files raw_file_actions raw_users raw_persons raw_parties raw_audit_events; do
+  for col in _cdc_op _cdc_ts _cdc_source_lsn _cdc_topic_offset _sink_ts; do
+    null_count=$(psql_wh "SELECT count(*) FROM ${raw_table} WHERE ${col} IS NULL;" | tr -d '[:space:]')
+    [ "$null_count" = "0" ] || err "expected ${col} non-null on every ${raw_table} row, found '${null_count}' null"
+  done
+done
 
-null_cdc_ts=$(psql_wh "SELECT count(*) FROM raw_files WHERE _cdc_ts IS NULL;" | tr -d '[:space:]')
-[ "$null_cdc_ts" = "0" ] || err "expected _cdc_ts non-null on every raw_files row, found ${null_cdc_ts} null"
-
-null_sink_ts=$(psql_wh "SELECT count(*) FROM raw_files WHERE _sink_ts IS NULL;" | tr -d '[:space:]')
-[ "$null_sink_ts" = "0" ] || err "expected _sink_ts non-null on every raw_files row, found ${null_sink_ts} null"
-
+# This could fail if we use an update for our seeded row, but we don't. The seed.sh script uses an insert-only source table.
 op_value=$(psql_wh "SELECT DISTINCT _cdc_op FROM raw_files;" | tr -d '[:space:]')
 [ "$op_value" = "c" ] || err "expected _cdc_op='c' (create) for an insert-only source, got '$op_value'"
 

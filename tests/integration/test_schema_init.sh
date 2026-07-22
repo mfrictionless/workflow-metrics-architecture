@@ -47,8 +47,8 @@ fi
 docker compose exec -T ods-postgres test -f /docker-entrypoint-initdb.d/001_schema.sql \
   || err "/docker-entrypoint-initdb.d/001_schema.sql not found in the container -- mount not wired"
 
-# 2. All 4 tables exist.
-for t in files file_actions parties audit_events users; do
+# 2. All 6 tables exist.
+for t in files file_actions parties audit_events users persons; do
   count=$(psql_c "SELECT count(*) FROM information_schema.tables WHERE table_name='$t';" | tr -d '[:space:]')
   [ "$count" = "1" ] || err "table '$t' does not exist"
 done
@@ -110,7 +110,7 @@ if [ -n "$file_id" ]; then
 fi
 
 # 5. Every column of every table has a non-empty comment.
-for t in files file_actions parties audit_events users; do
+for t in files file_actions parties audit_events users persons; do
   total=$(psql_c "SELECT count(*) FROM information_schema.columns WHERE table_name='$t';" | tr -d '[:space:]')
   commented=$(psql_c "
     SELECT count(*) FROM information_schema.columns c

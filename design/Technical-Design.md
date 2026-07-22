@@ -120,8 +120,9 @@ persons (
 parties (
   party_id          bigint PK,
   file_id           bigint FK,
+  person_id         bigint FK,
   role              varchar,        -- borrower, loan_officer, loan_processor, …
-  person_id         bigint FK,         
+           
 )
 
 users (
@@ -154,11 +155,11 @@ The warehouse follows dbt's native layering as the project standard. Medallion (
 
 ### Raw layer schema — dbt `sources` (JDBC-sink landed, read-only)
 
-Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Declared to dbt as the `raw` source (not a model). Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp).
+Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Declared to dbt as the `raw` source (not a model). Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp), `_cdc_source_lsn` (Postgres Log Sequence Number — the WAL position of the source change, per-table monotonically increasing), `_cdc_topic_offset` (Kafka topic offset — the record's position within its topic partition).
 
 ### Staging layer (dbt, `stg_` — conformed)
 
-Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id` / `person_id` / `party_id` / `user_id` / `audit_event_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_ts`. Materialized as views.
+Cleaned, deduplicated, typed versions of the raw tables — one row per business entity, latest state per `file_id` / `file_action_id` / `person_id` / `party_id` / `user_id` / `audit_event_id`. Deduplicates any redelivered Kafka records (at-least-once delivery) and resolves out-of-order arrival by `_cdc_source_lsn` / `_cdc_topic_offset` in that order. Materialized as views.
 
 ### Intermediate layer (dbt, `int_` — business/dimensional)
 

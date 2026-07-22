@@ -5,9 +5,10 @@ database or pip install. See design/Milestones.md M1.2/M1.3 and the RACI
 assignments in design/Home-Refinance-Workflow.md (steps 1, 3, 9, 12).
 
 person_id/user_id per role are DB-assigned identities (persons/users tables,
-M1.1.1), so this module takes them as input (`role_ids`) rather than
-fabricating them -- simulate.py resolves each role to a real person_id/
-user_id (a unique borrower per file, a shared pool for the other roles)
+M1.1, see design/Decisions.md D013), so this module takes them as input
+(`role_ids`) rather than fabricating them -- simulate.py resolves each role
+to a real person_id/user_id (a unique borrower per file, a shared pool for
+the other party roles, plus a fixed SYSTEM entry for RECORDING's receiver)
 before calling build_file.
 
 simulate.py (DB-writing) is the only module that imports psycopg2.
@@ -17,13 +18,16 @@ import datetime
 # Roles, in a fixed order.
 ROLES = ["BORROWER", "LOAN_OFFICER", "LOAN_PROCESSOR", "TITLE_AGENT", "NOTARY", "COUNTY_RECORDER"]
 
-# Sender/receiver role per step, keyed by action_code. RECORDING has no
-# receiver -- Autoclose closes the terminal step automatically (A5).
+# Sender/receiver role per step, keyed by action_code. RECORDING's receiver
+# is SYSTEM, not a party role -- Autoclose's own service principal
+# acknowledges receipt and closes the step/file automatically (A5).
+SYSTEM = "SYSTEM"
+
 STEP_ROLES = {
     "APPLICATION_SUBMIT": ("BORROWER", "LOAN_OFFICER"),
     "LOAN_PROCESS": ("BORROWER", "LOAN_PROCESSOR"),
     "SIGNING": ("BORROWER", "TITLE_AGENT"),
-    "RECORDING": ("TITLE_AGENT", None),
+    "RECORDING": ("TITLE_AGENT", SYSTEM),
 }
 
 ACTION_SEQUENCE = ["APPLICATION_SUBMIT", "LOAN_PROCESS", "SIGNING", "RECORDING"]
@@ -45,9 +49,10 @@ def build_file(file_number, base_ts, role_ids):
     for a DB layer to insert. Deterministic given (file_number, base_ts,
     role_ids).
 
-    `role_ids` maps each role in ROLES to {"person_id": ..., "user_id": ...}
-    -- real DB identities resolved by simulate.py (a unique borrower per
-    file, a shared pool for the other roles).
+    `role_ids` maps each role in ROLES, plus SYSTEM, to
+    {"person_id": ..., "user_id": ...} -- real DB identities resolved by
+    simulate.py (a unique borrower per file, a shared pool for the other
+    party roles, a fixed SYSTEM entry for RECORDING's receiver).
     """
     parties = [{"role": role, "person_id": role_ids[role]["person_id"]} for role in ROLES]
 

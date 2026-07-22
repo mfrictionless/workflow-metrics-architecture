@@ -35,7 +35,7 @@ simulate:
 register-connector:
 	@./scripts/register_connector.sh
 
-# dbt Core against the warehouse (Raw -> staging -> intermediate -> marts, M3+). Both
+# dbt Core against the warehouse (Raw -> staging -> intermediate -> marts, M3+). All
 # are one-off actions against an already-running warehouse-postgres, same
 # reasoning as `make seed` -- not part of bringing the stack up.
 dbt-debug:
@@ -43,6 +43,9 @@ dbt-debug:
 
 dbt-run:
 	@docker compose run --rm dbt run
+
+dbt-build:
+	@docker compose run --rm dbt build
 
 # Run every test in the repo: fast tier, then integration tier. Fail-fast --
 # stops at the first failing script.

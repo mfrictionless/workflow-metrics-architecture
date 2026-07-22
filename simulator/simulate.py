@@ -9,7 +9,7 @@ import uuid
 
 import psycopg2
 
-from workflow import ROLES, build_file, open_state
+from workflow import ROLES, SYSTEM, build_file, open_state
 
 # All roles except BORROWER draw from a shared, reusable pool -- these are
 # internal/vendor staff who plausibly handle many files. BORROWER is the
@@ -81,6 +81,46 @@ def ensure_pool(conn, pool_size):
                 pool[role].append((person_id, user_id))
     conn.commit()
     return pool
+
+
+def ensure_system_user(conn):
+    """Idempotently ensures the singleton Autoclose System principal exists
+    (matching ods/seed/seed.sql's fixed example) -- RECORDING's receiver,
+    per A5. Safe to call every run. Returns (person_id, user_id).
+    """
+    email = "autoclose@example.com"
+    with conn.cursor() as cur:
+        cur.execute("SELECT person_id FROM persons WHERE email = %s", (email,))
+        row = cur.fetchone()
+        if row:
+            person_id = row[0]
+        else:
+            cur.execute(
+                """
+                INSERT INTO persons (display_name, email, ssn_last4)
+                VALUES (%s, %s, %s)
+                RETURNING person_id
+                """,
+                ("Autoclose System", email, "SYSM"),
+            )
+            person_id = cur.fetchone()[0]
+
+        cur.execute("SELECT user_id FROM users WHERE person_id = %s", (person_id,))
+        row = cur.fetchone()
+        if row:
+            user_id = row[0]
+        else:
+            cur.execute(
+                """
+                INSERT INTO users (person_id, team_name, is_external_vendor_flag)
+                VALUES (%s, 'AMOD', true)
+                RETURNING user_id
+                """,
+                (person_id,),
+            )
+            user_id = cur.fetchone()[0]
+    conn.commit()
+    return person_id, user_id
 
 
 def insert_borrower(conn, file_number):
@@ -177,6 +217,7 @@ def main():
     conn = db_connection()
     try:
         pool = ensure_pool(conn, pool_size)
+        system_person_id, system_user_id = ensure_system_user(conn)
         for _ in range(count):
             file_number = f"SIM-{uuid.uuid4().hex[:12]}"
             # Jitter each file's base timestamp so runs aren't identical.
@@ -185,7 +226,10 @@ def main():
             )
 
             borrower_person_id, borrower_user_id = insert_borrower(conn, file_number)
-            role_ids = {"BORROWER": {"person_id": borrower_person_id, "user_id": borrower_user_id}}
+            role_ids = {
+                "BORROWER": {"person_id": borrower_person_id, "user_id": borrower_user_id},
+                SYSTEM: {"person_id": system_person_id, "user_id": system_user_id},
+            }
             for role in POOL_ROLES:
                 person_id, user_id = random.choice(pool[role])
                 role_ids[role] = {"person_id": person_id, "user_id": user_id}

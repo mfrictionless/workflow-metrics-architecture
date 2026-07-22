@@ -107,8 +107,15 @@ check_sender "SIGNING" "BORROWER"
 check_receiver "SIGNING" "TITLE_AGENT"
 check_sender "RECORDING" "TITLE_AGENT"
 
-null_recv=$(psql_c "SELECT count(*) FROM file_actions WHERE action_code='RECORDING' AND received_user_id IS NOT NULL;" | tr -d '[:space:]')
-[ "$null_recv" = "0" ] || err "$null_recv RECORDING row(s) have a non-NULL received_user_id"
+# RECORDING's receiver is the Autoclose System principal (A5), not a party --
+# resolved via persons.email directly since SYSTEM has no parties row.
+non_system_recv=$(psql_c "
+  SELECT count(*) FROM file_actions fa
+  JOIN users u ON u.user_id = fa.received_user_id
+  JOIN persons p ON p.person_id = u.person_id
+  WHERE fa.action_code = 'RECORDING' AND p.email <> 'autoclose@example.com';
+" | tr -d '[:space:]')
+[ "$non_system_recv" = "0" ] || err "$non_system_recv RECORDING row(s) have a receiver other than the Autoclose System principal"
 
 # Additive: running again adds more files rather than touching existing ones.
 COUNT=1 ./scripts/simulate.sh
