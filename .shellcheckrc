@@ -1,0 +1,7 @@
+# ShellCheck configuration
+# https://www.shellcheck.net/
+
+# Exclude warning codes that are stylistic and not critical to correctness.
+# SC2043: loops with single-element arrays are inefficient but intentional
+#         for clarity/consistency with multi-element cases.
+disable=SC2043

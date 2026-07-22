@@ -6,7 +6,7 @@ include .env
 # default -- Make applies COUNT ?= only when COUNT wasn't already set.
 COUNT ?= $(SIMULATOR_FILE_COUNT)
 
-.PHONY: up down seed simulate register-connector dbt-debug dbt-run test test-fast test-integration
+.PHONY: up down seed simulate register-connector dbt-debug dbt-run test test-fast test-integration lint
 
 # Bring the compose stack up. Fails with an actionable message (pointing at
 # .env) on a port conflict, rather than Docker's raw daemon error.
@@ -59,3 +59,7 @@ test-fast:
 # Run only the integration tier (needs Docker).
 test-integration:
 	@./scripts/run_tests.sh integration
+
+# Lint shell scripts for correctness and common mistakes.
+lint:
+	@shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh
