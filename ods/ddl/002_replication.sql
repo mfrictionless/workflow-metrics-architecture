@@ -7,6 +7,11 @@
 -- Postgres connector (M2.3) will consume. Named after their consumer, per
 -- common Debezium convention.
 
-CREATE PUBLICATION dbz_publication FOR TABLE files, file_actions, persons, users, parties, audit_events;
- 
+CREATE PUBLICATION dbz_publication FOR TABLE files,
+file_actions,
+persons,
+users,
+parties,
+audit_events;
+
 SELECT pg_create_logical_replication_slot('dbz_slot', 'pgoutput');

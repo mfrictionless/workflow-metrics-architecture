@@ -14,73 +14,73 @@
 -- constraints and deduplication belong.
 
 CREATE TABLE raw_files (
-    file_id       bigint,
-    file_number   varchar,
-    status        varchar,
-    opened_at     timestamptz,
-    closed_at     timestamptz,
-    county_fips   varchar,
-    product_type  varchar,
-    _cdc_op       varchar,
-    _cdc_ts       bigint,
-    _sink_ts      timestamptz NOT NULL DEFAULT now()
+    file_id bigint,
+    file_number varchar,
+    status varchar,
+    opened_at timestamptz,
+    closed_at timestamptz,
+    county_fips varchar,
+    product_type varchar,
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE raw_persons (
-    person_id     bigint,
-    display_name  varchar,
-    email         varchar,
-    ssn_last4    varchar(4),
-    _cdc_op       varchar,
-    _cdc_ts       bigint,
-    _sink_ts      timestamptz NOT NULL DEFAULT now()
+    person_id bigint,
+    display_name varchar,
+    email varchar,
+    ssn_last4 varchar(4),
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
 
 
 CREATE TABLE raw_users (
-    user_id      bigint,
-    person_id   bigint,
-    team_name     varchar,
+    user_id bigint,
+    person_id bigint,
+    team_name varchar,
     is_external_vendor_flag boolean,
-    _cdc_op       varchar,
-    _cdc_ts       bigint,
-    _sink_ts      timestamptz NOT NULL DEFAULT now()
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
 
 
 CREATE TABLE raw_file_actions (
-    file_action_id    bigint,
-    file_id           bigint,
-    action_code       varchar,
-    action_type       varchar,
-    sent_at           timestamptz,
-    received_at       timestamptz,
-    sent_user_id      bigint,
-    received_user_id  bigint,
-    live_flag         boolean,
-    _cdc_op           varchar,
-    _cdc_ts           bigint,
-    _sink_ts          timestamptz NOT NULL DEFAULT now()
+    file_action_id bigint,
+    file_id bigint,
+    action_code varchar,
+    action_type varchar,
+    sent_at timestamptz,
+    received_at timestamptz,
+    sent_user_id bigint,
+    received_user_id bigint,
+    live_flag boolean,
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE raw_parties (
-    party_id  bigint,
-    file_id   bigint,
+    party_id bigint,
+    file_id bigint,
     person_id bigint,
-    role      varchar,
-    _cdc_op   varchar,
-    _cdc_ts   bigint,
-    _sink_ts  timestamptz NOT NULL DEFAULT now()
+    role varchar,
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE raw_audit_events (
-    audit_event_id  bigint,
-    file_id         bigint,
-    user_id         bigint,
-    event_type      varchar,
-    description     text,
-    created_at      timestamptz,
-    _cdc_op         varchar,
-    _cdc_ts         bigint,
-    _sink_ts        timestamptz NOT NULL DEFAULT now()
+    audit_event_id bigint,
+    file_id bigint,
+    user_id bigint,
+    event_type varchar,
+    description text,
+    created_at timestamptz,
+    _cdc_op varchar,
+    _cdc_ts bigint,
+    _sink_ts timestamptz NOT NULL DEFAULT now()
 );
