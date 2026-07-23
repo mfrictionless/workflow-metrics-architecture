@@ -6,7 +6,7 @@ include .env
 # default -- Make applies COUNT ?= only when COUNT wasn't already set.
 COUNT ?= $(SIMULATOR_FILE_COUNT)
 
-.PHONY: up down seed simulate register-connector dbt-debug dbt-run test test-fast test-integration lint
+.PHONY: up down seed simulate register-connector dbt-debug dbt-run test test-fast test-integration lint lint-shell lint-sql lint-py
 
 # Bring the compose stack up. Fails with an actionable message (pointing at
 # .env) on a port conflict, rather than Docker's raw daemon error.
@@ -61,15 +61,30 @@ test-integration:
 	@./scripts/run_tests.sh integration
 
 # Lint shell scripts for correctness and common mistakes.
-# Lint SQL files for style and potential issues.
-# Lint and format-check Python (simulator).
-lint:
+lint-shell:
 	@echo "=== Shell Script Linting ===" && \
-	shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh && \
-	echo "" && \
-	echo "=== SQL Linting ===" && \
-	sqlfluff lint ./ods/ddl/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/ && \
-	echo "" && \
-	echo "=== Python Linting ===" && \
+	shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh
+
+# Lint SQL files for style and potential issues.
+lint-sql:
+	@echo "=== SQL Linting ===" && \
+	sqlfluff lint ./ods/ddl/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/
+
+# Lint and format-check Python (simulator) via the pinned Ruff image.
+lint-py:
+	@echo "=== Python Linting ===" && \
 	docker run --rm -v "$$PWD:/io" -w /io ghcr.io/astral-sh/ruff:0.16.0 check ./simulator/ && \
 	docker run --rm -v "$$PWD:/io" -w /io ghcr.io/astral-sh/ruff:0.16.0 format --check ./simulator/
+
+# Run every language's linter. Each stage runs even if an earlier one fails, so
+# one language's issues never hide another's; exits non-zero if any failed.
+lint:
+	@rc=0; \
+	$(MAKE) --no-print-directory lint-shell || rc=1; \
+	echo ""; \
+	$(MAKE) --no-print-directory lint-sql || rc=1; \
+	echo ""; \
+	$(MAKE) --no-print-directory lint-py || rc=1; \
+	echo ""; \
+	if [ "$$rc" -ne 0 ]; then echo "=== lint FAILED ==="; else echo "=== lint passed ==="; fi; \
+	exit $$rc
