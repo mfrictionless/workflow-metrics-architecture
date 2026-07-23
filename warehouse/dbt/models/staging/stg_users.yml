@@ -5,6 +5,6 @@ models:
     description: One current row per user_id, deduplicated from raw_users by _cdc_ts.
     columns:
       - name: user_id
-        tests:
+        data_tests:
           - unique
           - not_null

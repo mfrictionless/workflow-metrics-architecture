@@ -5,6 +5,6 @@ models:
     description: One current row per audit_event_id, deduplicated from raw_audit_events by _cdc_ts.
     columns:
       - name: audit_event_id
-        tests:
+        data_tests:
           - unique
           - not_null

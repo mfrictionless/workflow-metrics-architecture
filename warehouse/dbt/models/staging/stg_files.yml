@@ -5,6 +5,6 @@ models:
     description: One current row per file_id, deduplicated from raw_files by _cdc_ts.
     columns:
       - name: file_id
-        tests:
+        data_tests:
           - unique
           - not_null
