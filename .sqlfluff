@@ -1,0 +1,19 @@
+[sqlfluff]
+dialect = postgres
+templater = jinja
+# Path exclusions live in .sqlfluffignore (exclude_patterns is unreliable in
+# this version). ods/seed is excluded there because it is a psql client script
+# (:'var' interpolation, \gset meta-commands): sqlfluff misreads :'var' as a
+# cast-colon and its LT01 autofix corrupts it to `: 'var'`. The placeholder
+# templater that understands :'var' can only be set at the repo-root templater,
+# which is jinja here for the dbt models.
+max_line_length = 120
+
+# The dbt models use Jinja (source(), a custom dedup_latest macro). The jinja
+# templater renders them without the full dbt stack: apply_dbt_builtins stubs
+# ref()/source()/config(), and load_macros_from_path loads project macros so
+# dedup_latest resolves. Plain Postgres DDL (ods/, warehouse/ddl) has no Jinja,
+# so it passes through this templater unchanged.
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = true
+load_macros_from_path = warehouse/dbt/macros

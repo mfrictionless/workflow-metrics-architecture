@@ -1,0 +1,6 @@
+# Generated dbt artifacts -- not source to lint.
+warehouse/dbt/target/
+
+# psql client script (:'var' interpolation, \gset meta-commands), not plain
+# SQL. See .sqlfluff for why the templater that understands it can't be used.
+ods/seed/
