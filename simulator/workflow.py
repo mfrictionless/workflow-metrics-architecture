@@ -13,6 +13,7 @@ before calling build_file.
 
 simulate.py (DB-writing) is the only module that imports psycopg2.
 """
+
 import datetime
 
 # Roles, in a fixed order.
@@ -97,10 +98,7 @@ def open_state(file_data):
     input. See design/Milestones.md M2.8.
     """
     open_file = {**file_data["file"], "status": "WIP", "closed_at": None}
-    open_actions = [
-        {**action, "received_at": None, "received_user_id": None}
-        for action in file_data["file_actions"]
-    ]
+    open_actions = [{**action, "received_at": None, "received_user_id": None} for action in file_data["file_actions"]]
     return {
         "file": open_file,
         "parties": file_data["parties"],

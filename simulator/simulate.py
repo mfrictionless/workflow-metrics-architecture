@@ -2,13 +2,13 @@
 module that imports psycopg2 -- row-generation logic lives in workflow.py so
 it can be unit-tested without a database. See design/Milestones.md M1.3.
 """
+
 import datetime
 import os
 import random
 import uuid
 
 import psycopg2
-
 from workflow import ROLES, SYSTEM, build_file, open_state
 
 # All roles except BORROWER draw from a shared, reusable pool -- these are
@@ -202,7 +202,7 @@ def insert_file(conn, file_data):
             "UPDATE files SET status = %(status)s, closed_at = %(closed_at)s WHERE file_id = %(file_id)s",
             {**final_file, "file_id": file_id},
         )
-        for action_id, action in zip(action_ids, file_data["file_actions"]):
+        for action_id, action in zip(action_ids, file_data["file_actions"], strict=True):
             cur.execute(
                 "UPDATE file_actions SET received_at = %s, received_user_id = %s WHERE file_action_id = %s",
                 (action["received_at"], action["received_user_id"], action_id),
@@ -221,9 +221,7 @@ def main():
         for _ in range(count):
             file_number = f"SIM-{uuid.uuid4().hex[:12]}"
             # Jitter each file's base timestamp so runs aren't identical.
-            base_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-                days=random.uniform(0, 30)
-            )
+            base_ts = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=random.uniform(0, 30))
 
             borrower_person_id, borrower_user_id = insert_borrower(conn, file_number)
             role_ids = {

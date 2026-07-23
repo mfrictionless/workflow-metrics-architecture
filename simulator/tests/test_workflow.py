@@ -1,6 +1,7 @@
 """Fast, dependency-free unit tests for the simulator's pure row-generation
 logic (no DB, no psycopg2 import). See design/Milestones.md M1.3.
 """
+
 import datetime
 import unittest
 
@@ -22,15 +23,12 @@ def make_role_ids(offset=0):
     """A fixture role_ids map, mirroring what simulate.py resolves from the DB
     (a unique person_id/user_id pair per role, plus SYSTEM) before calling
     build_file."""
-    return {
-        role: {"person_id": offset + i * 2, "user_id": offset + i * 2 + 1}
-        for i, role in enumerate(ROLES)
-    }
+    return {role: {"person_id": offset + i * 2, "user_id": offset + i * 2 + 1} for i, role in enumerate(ROLES)}
 
 
 class BuildFileTests(unittest.TestCase):
     def setUp(self):
-        self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.UTC)
         self.role_ids = make_role_ids()
         self.result = build_file("SIM-0001", self.base_ts, self.role_ids)
 
@@ -59,9 +57,7 @@ class BuildFileTests(unittest.TestCase):
             expected_sender, expected_receiver = EXPECTED_ROLES[action["action_code"]]
             self.assertEqual(role_by_user_id[action["sent_user_id"]], expected_sender, action["action_code"])
             if expected_receiver is not None:
-                self.assertEqual(
-                    role_by_user_id[action["received_user_id"]], expected_receiver, action["action_code"]
-                )
+                self.assertEqual(role_by_user_id[action["received_user_id"]], expected_receiver, action["action_code"])
 
     def test_parties_use_role_ids_person_id(self):
         for party in self.result["parties"]:
@@ -80,7 +76,7 @@ class OpenStateTests(unittest.TestCase):
     it UPDATEs the file to its closed state (which is build_file's output)."""
 
     def setUp(self):
-        self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        self.base_ts = datetime.datetime(2026, 7, 14, 12, 0, 0, tzinfo=datetime.UTC)
         self.closed = build_file("SIM-0001", self.base_ts, make_role_ids())
         self.open = open_state(self.closed)
 
@@ -106,7 +102,7 @@ class OpenStateTests(unittest.TestCase):
             [a["action_code"] for a in self.open["file_actions"]],
             [a["action_code"] for a in self.closed["file_actions"]],
         )
-        for o, c in zip(self.open["file_actions"], self.closed["file_actions"]):
+        for o, c in zip(self.open["file_actions"], self.closed["file_actions"], strict=True):
             self.assertEqual(o["sent_at"], c["sent_at"], o["action_code"])
             self.assertEqual(o["sent_user_id"], c["sent_user_id"], o["action_code"])
 

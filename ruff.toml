@@ -1,0 +1,16 @@
+# Ruff config for the Python simulator (simulator/). One tool covers linting
+# and formatting, mirroring the one-tool-per-language convention (shellcheck
+# for shell, sqlfluff for SQL). Invoked from `make lint`.
+#
+# line-length matches .sqlfluff's max_line_length = 120 so the repo has a single
+# wrap width across languages. target-version tracks simulator/Dockerfile
+# (python:3.12-slim).
+target-version = "py312"
+line-length = 120
+
+[lint]
+# Ruff's default set (E4/E7/E9, F) plus high-signal, low-noise additions:
+#   I  — import sorting (imports are already stdlib/third-party/local grouped)
+#   UP — pyupgrade, keeps syntax current with the 3.12 target
+#   B  — flake8-bugbear, catches likely bugs (e.g. mutable default args)
+select = ["E", "F", "I", "UP", "B"]
