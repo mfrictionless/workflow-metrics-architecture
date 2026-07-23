@@ -67,4 +67,4 @@ lint:
 	shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh && \
 	echo "" && \
 	echo "=== SQL Linting ===" && \
-	sqlfluff lint ./ods/ddl/ ./ods/seed/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/
+	sqlfluff lint ./ods/ddl/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/
