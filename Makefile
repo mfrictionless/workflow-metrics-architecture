@@ -62,9 +62,14 @@ test-integration:
 
 # Lint shell scripts for correctness and common mistakes.
 # Lint SQL files for style and potential issues.
+# Lint and format-check Python (simulator).
 lint:
 	@echo "=== Shell Script Linting ===" && \
 	shellcheck ./scripts/*.sh ./tests/*.sh ./tests/integration/*.sh && \
 	echo "" && \
 	echo "=== SQL Linting ===" && \
-	sqlfluff lint ./ods/ddl/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/
+	sqlfluff lint ./ods/ddl/ ./warehouse/ddl/ ./warehouse/dbt/models/ ./warehouse/dbt/macros/ && \
+	echo "" && \
+	echo "=== Python Linting ===" && \
+	docker run --rm -v "$$PWD:/io" -w /io ghcr.io/astral-sh/ruff:0.16.0 check ./simulator/ && \
+	docker run --rm -v "$$PWD:/io" -w /io ghcr.io/astral-sh/ruff:0.16.0 format --check ./simulator/
