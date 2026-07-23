@@ -155,7 +155,16 @@ The warehouse follows dbt's native layering as the project standard. Medallion (
 
 ### Raw layer schema — dbt `sources` (JDBC-sink landed, read-only)
 
-Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Declared to dbt as the `raw` source (not a model). Tracks `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above), `_cdc_ts` (Debezium event timestamp), `_sink_ts` (JDBC sink write timestamp), `_cdc_source_lsn` (Postgres Log Sequence Number — the WAL position of the source change, per-table monotonically increasing), `_cdc_topic_offset` (Kafka topic offset — the record's position within its topic partition).
+Mirrors ODS schema; append-only landing for Debezium change events written by the Kafka Connect JDBC sink. Declared to dbt as the `raw` source (not a model). 
+
+**Tracks:**
+- `_cdc_op` (INSERT/UPDATE/DELETE, though deletes are not expected — see assumption above)
+- `_cdc_ts` (Debezium event timestamp)
+- `_sink_ts` (JDBC sink write timestamp) 
+- `_cdc_source_txn_id` (Debezium `source.txId`, a plain integer — the stable, directly `=`-comparable key that correlates rows landed from the same ODS transaction across tables; see [D012](Decisions.md#d012))
+- `_cdc_txn_id` (Debezium `transaction.id`, `"<txId>:<lsn>"` — demonstrates the transaction-metadata feature and ties to the `ods.transaction` BEGIN/END events, but its LSN suffix advances per WAL record, so it is not equal across rows in one transaction)
+- `_cdc_source_lsn` (Postgres Log Sequence Number — the WAL position of the source change, per-table monotonically increasing)
+- `_cdc_topic_offset` (Kafka topic offset — the record's position within its topic partition)
 
 ### Staging layer (dbt, `stg_` — conformed)
 
